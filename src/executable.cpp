@@ -9,7 +9,7 @@ int main() {
   hunks.add(1, "", "all\nwere\noccupied");
   //hunks.add(2, "were", "the\nseats\nwere");
   // also valid
-  //hunks.add(2, "", "the\nseats");
+  hunks.add(2, "", "the\nseats");
   hunks.add(2, "", "clean");
   hunks.add(4, "", "duly");
   //hunks.add(5, "", "blue");
