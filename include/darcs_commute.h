@@ -63,6 +63,8 @@ namespace DarcsPatch {
 
     struct Commute {
 
+        static Maybe<Tuple2<Patch*, Patch*>> commute (Tuple2<Patch*, Patch*> & p) {
+        }
         static Maybe<Tuple2<FL<Patch*>, FL<Patch*>>> commute (Tuple2<FL<Patch*>, FL<Patch*>> & p) {
             if (p.v1.isNil()) {
                 return {{p.v2, p.v1};
@@ -243,6 +245,7 @@ namespace DarcsPatch {
 
     using CommuteFn = std::function<Maybe<Tuple2<FL<PatchInfoAndG>, PatchInfoAndG>> (Tuple2<PatchInfoAndG, FL<PatchInfoAndG>>)>;
     using CommuteFn2 = std::function<Maybe<Tuple2<Patch*, RL<Patch*>>> (Tuple2<RL<Patch*>, Patch*>)>;
+    using CommuteFn3 = std::function<Maybe<Tuple2<Patch*, Patch*>> (Tuple2<Patch*, Patch*>)>;
 
     Maybe<Tuple2<FL<PatchInfoAndG>, PatchInfoAndG>> CommuteIdFL(const CommuteFn & commuter, const Tuple2<PatchInfoAndG, FL<PatchInfoAndG>> & p) {
         if (p.v2.isNil()) {
@@ -272,7 +275,7 @@ namespace DarcsPatch {
         return commuterIdFL(Commute::commute, p);
     }
 
-    Maybe<Tuple2<Patch*, RL<Patch*>> commuterRLId(const CommuteFn & commuter, const Tuple2<RL<Patch*>, Patch*> & p) {
+    Maybe<Tuple2<Patch*, RL<Patch*>> commuterRLId(const CommuteFn3 & commuter, const Tuple2<RL<Patch*>, Patch*> & p) {
         if (p.v1.isNil()) {
             return {p.v2, p.v1};
         }
@@ -281,7 +284,7 @@ namespace DarcsPatch {
         RL<Patch*> xs;
         p.v1.extract(x, xs);
 
-        auto tmp = commuter({x, y}); // at this point, we are just metadata + hash
+        auto tmp = commuter({x, y}); // at this point, we compare patches, eg FileHunk
         if (!tmp.has_value) {
             return tmp;
         }
@@ -296,9 +299,9 @@ namespace DarcsPatch {
         return {y2, xs1.append(x1)};
     }
 
-    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> left(const CommuteFn & commuter, const RL<Patch*> & p1, const FL<Patch*> & p2);
+    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> left(const CommuteFn3 & commuter, const RL<Patch*> & p1, const FL<Patch*> & p2);
 
-    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> right(const CommuteFn & commuter, const RL<Patch*> & p1, const FL<Patch*> & p2) {
+    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> right(const CommuteFn3 & commuter, const RL<Patch*> & p1, const FL<Patch*> & p2) {
         RL<Patch*> & as = p1;
         if (p2.isNil()) {
             return {{p2, as}};
@@ -320,7 +323,7 @@ namespace DarcsPatch {
         auto as2 = tmp.v2;
         return {{bs1.append(b1), as2}};
     }
-    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> left(const CommuteFn & commuter, const RL<Patch*> & p1, const FL<Patch*> & p2) {
+    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> left(const CommuteFn3 & commuter, const RL<Patch*> & p1, const FL<Patch*> & p2) {
         FL<Patch*> & bs = p2;
         if (p1.isNil()) {
             return {{bs, p1}};
@@ -342,7 +345,7 @@ namespace DarcsPatch {
         auto as1 = tmp.v2;
         return {bs2, {as1.append(a1)}};
     }
-    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> CommuterRLFL(const CommuteFn & commuter, const RL<Patch*> & xs, const FL<Patch*> & ys) {
+    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> CommuterRLFL(const CommuteFn3 & commuter, const RL<Patch*> & xs, const FL<Patch*> & ys) {
         return right(commuter, xs, ys);
     }
 
