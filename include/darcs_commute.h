@@ -61,10 +61,131 @@ namespace DarcsPatch {
 
     struct Commute {
 
-        static Maybe<Tuple2<FL<Patch>, PatchId>> commute (Tuple2<PatchId, FL<Patch>> & p) {
-            if (p.first.isNil()) {
+        static Maybe<Tuple2<FL<Patch>, FL<Patch>>> commute (Tuple2<FL<Patch>, FL<Patch>> & p) {
+            if (p.v1.isNil()) {
+                return {{p.v2, p.v1};
+            }
+            if (p.v2.isNil()) {
+                return {{p.v2, p.v1};
+            }
+            // ...
+            return Nothing();
+        }
+            /*
+                // this is called with the following
+                
+                [-2: src/Darcs/Patch/PatchInfoAnd.hs:266:40-49] darcs> patch2patchinfo x1
+
+                PatchInfo {
+                    _piDate = "20230508084629",
+                    _piName = "TAG refs/branches/master",
+                    _piAuthor = "smallville7123 <smallville7123@gmail.com>",
+                    _piLog = ["Ignore-this: e6e67f33f9d47f7725b0f23a22a9f112"],
+                    _piLegacyIsInverted = False
+                }
+
+
+
+                [-2: src/Darcs/Patch/PatchInfoAnd.hs:266:40-49] darcs> patch2patchinfo y1
+
+                PatchInfo {
+                    _piDate = "20230508084629",
+                    _piName = "TAG refs/branches/master",
+                    _piAuthor = "smallville7123 <smallville7123@gmail.com>",
+                    _piLog = ["Ignore-this: 6915e596e1147deec72d6421d15982c9"],
+                    _piLegacyIsInverted = False
+                }
+            */
+        static Maybe<Tuple2<Named<Patch>, Named<Patch>>> commute (Tuple2<Named<Patch>, Named<Patch>> & p) {
+            /*
+                src/Darcs/Patch/Named.hs line 168
+
+                d1 :: [Darcs.Patch.Info.PatchInfo]
+                d2 :: [Darcs.Patch.Info.PatchInfo]
+                n1 :: Darcs.Patch.Info.PatchInfo
+                n2 :: Darcs.Patch.Info.PatchInfo
+                p1 :: Darcs.Patch.Witnesses.Ordered.FL p wX wZ
+                p2 :: Darcs.Patch.Witnesses.Ordered.FL p wZ wY
+                197      commute (NamedP n1 d1 p1 :> NamedP n2 d2 p2) =
+                198          if n2 `elem` d1 || n1 `elem` d2
+                199          then Nothing
+                200          else do (p2' :> p1') <- commute (p1 :> p2)
+                201                  return (NamedP n2 d2 p2' :> NamedP n1 d1 p1')
+                202  
+            */
+
+            if ((p.v1.d.size() != 0 && p.v1.d.contains(p.v2.n)) || (p.v2.d.size() != 0 && p.v2.d.contains(p.v1.n))) {
                 return Nothing();
             }
+            auto tmp = commute(p.v1.p, p.v2.p);
+            if (!tmp.has_value) {
+                return tmp;
+            }
+            return {{{p.v2.n, p.v2.d, tmp->v1}, {p.v1.n, p.v1.d, tmp->v2}}};
+        }
+
+        static Maybe<Tuple2<PatchInfoAndG, PatchInfoAndG>> commute (Tuple2<PatchInfoAndG, PatchInfoAndG> & p) {
+            PatchInfoAndG x = p.v1;
+            PatchInfoAndG y = p.v2;
+
+            // y' :> x' <- commute (hopefully x :> hopefully y)
+            // 
+            /*
+                -- | @'hopefully' hp@ tries to get a patch from a 'PatchInfoAnd'
+                -- value. If it fails, it outputs an error \"failed to read patch:
+                -- \<description of the patch>\". We get the description of the patch
+                -- from the info part of 'hp'
+                hopefully :: PatchInfoAndG p wA wB -> p wA wB
+                hopefully = conscientiously $ \e -> text "failed to read patch:" $$ e
+            */
+            // eventually calls       NamedP n d       n is patchinfo        d is NilFL
+            /*
+                // [hopefully] itself returns the following
+
+                x1 :: Darcs.Patch.Named.Named a wX wZ = Darcs.Patch.Named.NamedP
+                                                        (Darcs.Patch.Info.PatchInfo
+                                                            (Data.ByteString.Internal.PS ...)
+                                                            (Data.ByteString.Internal.PS ...) ....)
+                                                        [] (Darcs.Patch.Witnesses.Ordered.:>: _ _)
+                y1 :: Darcs.Patch.Named.Named a wZ wY = Darcs.Patch.Named.NamedP
+                                                        (Darcs.Patch.Info.PatchInfo
+                                                            (Data.ByteString.Internal.PS ...)
+                                                            (Data.ByteString.Internal.PS ...) ....)
+                                                        [] (Darcs.Patch.Witnesses.Ordered.:>: _ _)
+                264                                !x1 = hopefully x
+                265                                !y1 = hopefully y
+                266                                !tuple = (x1 :> y1)
+            */
+            /*
+                // this is called with the following
+
+                [-2: src/Darcs/Patch/PatchInfoAnd.hs:266:40-49] darcs> patch2patchinfo x1
+
+                PatchInfo {
+                    _piDate = "20230508084629",
+                    _piName = "TAG refs/branches/master",
+                    _piAuthor = "smallville7123 <smallville7123@gmail.com>",
+                    _piLog = ["Ignore-this: e6e67f33f9d47f7725b0f23a22a9f112"],
+                    _piLegacyIsInverted = False
+                }
+
+
+
+                [-2: src/Darcs/Patch/PatchInfoAnd.hs:266:40-49] darcs> patch2patchinfo y1
+
+                PatchInfo {
+                    _piDate = "20230508084629",
+                    _piName = "TAG refs/branches/master",
+                    _piAuthor = "smallville7123 <smallville7123@gmail.com>",
+                    _piLog = ["Ignore-this: 6915e596e1147deec72d6421d15982c9"],
+                    _piLegacyIsInverted = False
+                }
+            */
+            auto tmp = commuter({x.n, y.n});
+            if (!tmp.has_value) {
+                return tmp;
+            }
+            return {tmp->v2, tmp->v1};
         }
 
         // error for any other type
@@ -88,10 +209,11 @@ namespace DarcsPatch {
 
     this constructs the Commute FL type
 
-    geekosaur
+    geekosaur:
     commuteFL uses methods from Commute, which at that point the compiler has converted
     to a record of methods representing a specific instance
-    geekosaur
+
+    geekosaur:
     Commute p => means that at each call site the compiler will solve the type signature
     at that point to determine p and pass the appropriate instance … Commute as a hidden parameter;
     the function (here, commuteFL) can then call methods from that instance
@@ -111,35 +233,33 @@ namespace DarcsPatch {
         return ((y' :>: ys') :> x'')
     */
 
-    using CommuteFn = std::function<Maybe<Tuple2<FL<Patch>, PatchId>> (Tuple2<PatchId, FL<Patch>>)>;
+    using CommuteFn = std::function<Maybe<Tuple2<FL<PatchInfoAndG>, PatchInfoAndG>> (Tuple2<PatchInfoAndG, FL<PatchInfoAndG>>)>;
 
-    Maybe<Tuple2<FL<Patch>, PatchId>> CommuteIdFL(const CommuteFn & commuter, const Tuple2<PatchId, FL<Patch>> & p) {
+    Maybe<Tuple2<FL<PatchInfoAndG>, PatchInfoAndG>> CommuteIdFL(const CommuteFn & commuter, const Tuple2<PatchInfoAndG, FL<PatchInfoAndG>> & p) {
         if (p.v2.isNil()) {
             return {p.v2, p.v1};
         }
-        PatchId x = p.v1;
-        Patch y;
-        FL<Patch> ys;
+        PatchInfoAndG x = p.v1;
+        PatchInfoAndG y;
+        FL<PatchInfoAndG> ys;
         p.v2.extract(y, ys);
 
-        auto tmp = commuter({x, y});
+        auto tmp = commuter({x, y}); // at this point, we are just metadata + hash
         if (!tmp.has_value) {
             return tmp;
         }
-        FL<Patch> y1 = tmp->v1;
-        PatchId x1 = tmp->v2;
+        PatchInfoAndG y1 = tmp->v1;
+        PatchInfoAndG x1 = tmp->v2;
         auto tmp1 = commuterIdFL(commuter, {x1, ys});
         if (!tmp1.has_value) {
             return tmp1;
         }
-        PatchId ys2 = tmp1->first;
-        Patch y2;
-        FL<Patch> x2;
-        tmp1->second.extract(y2, x2);
-        return {{x2, y2}, ys2};
+        FL<PatchInfoAndG> ys1 = tmp1->first;
+        PatchInfoAndG x2 = tmp1->second;
+        return {ys1.append(y1), x2};
     }
 
-    Maybe<Tuple2<FL<Patch>, PatchId>> CommuteFL(const Tuple2<PatchId, FL<Patch>> & p) {
+    Maybe<Tuple2<FL<PatchInfoAndG>, PatchInfoAndG>> CommuteFL(const Tuple2<PatchInfoAndG, FL<PatchInfoAndG>> & p) {
         return commuterIdFL(Commute::commute, p);
     }
 }

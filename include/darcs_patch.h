@@ -113,17 +113,23 @@ namespace DarcsPatch {
         // list order is not changed
         //
 
-        Dep foldDeps(const RL<Patch> & arg, const FL<PatchId> & p_and_deps, const FL<PatchId> & non_deps, Dep & acc, const Map<PatchId, Dep> & m) {
+        /*
+            foldDeps ::
+                RL (PatchInfoAndG a) wA1 wB
+                -> FL (PatchInfoAndG a) wB wC1
+                -> FL (PatchInfoAndG a) wC1 wD1
+        */
+        Dep foldDeps(const RL<PatchInfoAndG> & arg, const FL<PatchInfoAndG> & p_and_deps, const FL<PatchInfoAndG> & non_deps, Dep & acc, const Map<PatchId, Dep> & m) {
             if (qs.isNil()) {
                 return acc;
             }
-            Patch q;
-            RL<Patch> qs;
+            PatchInfoAndG q;
+            RL<PatchInfoAndG> qs;
             arg.extract(q, qs);
-            PatchId j = q.ident();
+            PatchId j = q.n.p.ident();
             
-            Set<PatchId> direct = acc.v1;
-            Set<PatchId> indirect = acc.v2;
+            Set<PatchId> & direct = acc.v1;
+            Set<PatchId> & indirect = acc.v2;
             
             /*
             -- If we already know we indirectly depend on q, then there is
@@ -173,15 +179,64 @@ namespace DarcsPatch {
             return foldDeps(qs, p_and_deps.append(q), non_deps, {direct.append(j), addDeps(j, indirect, m).value_copy()}, m);
         }
         
-        Map<PatchId, Dep> depsGraph(const Map<PatchId, Dep> & m, const RL<Patch> & arg) {
+        Map<PatchId, Dep> depsGraph(const Map<PatchId, Dep> & m, const RL<PatchInfoAndG> & arg) {
             if (ps.isNil()) {
                 return m;
             }
-            Patch p;
-            RL<Patch> ps;
+            PatchInfoAndG p;
+            RL<PatchInfoAndG> ps;
             arg.extract(x, xs);
-            PatchId j = p.ident();
             m = depsGraph(m, ps);
+
+            /*
+                we get called with a p of the folllowing
+                "PIAP (
+                    PatchInfo {
+                        _piDate = \"20230508093807\",
+                        _piName = \"d\",
+                        _piAuthor = \"smallville7123 <smallville7123@gmail.com>\",
+                        _piLog = [\"Ignore-this: bdcb1045459063facc23938f4872c9b3\"],
+                        _piLegacyIsInverted = False
+                        }
+                )
+                (
+                    Hashed (
+                        PatchHash (
+                            WithSize 126 (
+                                SHA256 \"\\191\\144V\\198@|\\158M\\194\\207\\192+\\f\\167aUwq\\b\\209\\DLE-\\244\\137\\202a\\226-ej\\135\\196\"
+                            )
+                        )
+                    )
+                    (
+                        Actually (
+                            NamedP (
+                                PatchInfo {
+                                    _piDate = \"20230508093807\",
+                                    _piName = \"d\",
+                                    _piAuthor = \"smallville7123 <smallville7123@gmail.com>\",
+                                    _piLog = [\"Ignore-this: bdcb1045459063facc23938f4872c9b3\"],
+                                    _piLegacyIsInverted = False
+                                }
+                            )
+                            [] (
+                                Normal (
+                                    FP (
+                                        AnchoredPath [
+                                            Name {
+                                                unName = \"p\"
+                                            }
+                                        ]
+                                    )
+                                    (
+                                        Hunk 6 [] [\"duly\"]
+                                    )
+                                ) :>: NilFL
+                            )
+                        )
+                    )
+                )"
+            */
+
             // allDeps j = uncurry S.union . fromJust . M.lookup j
             //
             // equivalent to lambda name allDeps with auto j
@@ -190,7 +245,10 @@ namespace DarcsPatch {
             //
             // code here
             
-            m.insert(j, foldDeps(ps, {p}, {}, {}, m));
+            auto j2 = p.n.p.ident();
+            auto folded = foldDeps(ps, {p}, {}, {}, m);
+            
+            m.insert(j2, folded);
             return m;
         }
         

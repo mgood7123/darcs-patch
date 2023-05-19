@@ -459,6 +459,74 @@ namespace DarcsPatch {
         virtual void invert() = 0;
     }
 
+    template <typename T>
+    struct Named {
+        FL<T> d;
+        FL<T> p;
+        T n;
+        Named(const FL<T> & d, const FL<T> & p, const T & n) {
+            this->d = d;
+            this->p = p;
+            this->n = n;
+        }
+    };
+    
+    struct PatchInfoAndG {
+        Named<Patch> n;
+        PatchInfoAndG(Patch p) {
+            n = {{}, {}, p};
+        }
+        PatchInfoAndG(Named<Patch> n) {
+            this->n = n;
+        }
+    };
+
+    // PIAP defines the following
+    /*
+        PIAP
+            PatchInfo
+                META-DATA
+            Hashed
+                WithSize
+                PatchInfoAnd.Actually
+                    NamedP
+                        PatchInfo
+                            META-DATA
+                        []
+                        (:>:
+                            (
+                                COMMIT_MESSAGE
+                                Hunk
+                            )
+                            NilFL
+                        )
+    */
+
+    /*
+        // reads patch metadata and returns a FileHunk
+        //
+        // when might we need to skip new lines ?
+        //
+
+        readHunk :: FileNameFormat -> Parser (Prim wX wY)
+        readHunk fmt = do
+        string hunk'
+        fi <- readFileName fmt
+        l <- int
+        have_nl <- skipNewline
+        if have_nl
+            then do
+            _ <- linesStartingWith ' ' -- skipping context
+            old <- linesStartingWith '-'
+            new <- linesStartingWith '+'
+            _ <- linesStartingWith ' ' -- skipping context
+            return $ hunk fi l old new
+            else return $ hunk fi l [] []
+
+        skipNewline :: Parser Bool
+        skipNewline = option False (char '\n' >> return True)
+    */
+
     struct FileHunk : Patch {
         PatchId id;
         size_t line;
@@ -486,5 +554,6 @@ namespace DarcsPatch {
     };
 
     typedef Tuple2<Set<PatchId>, Set<PatchId>> Dep;
+    typedef Tuple2<Set<PatchInfoAndG>, Set<PatchInfoAndG>> Deps;
 
 };
