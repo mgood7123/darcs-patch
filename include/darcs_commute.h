@@ -64,6 +64,20 @@ namespace DarcsPatch {
     struct Commute {
 
         static Maybe<Tuple2<Patch*, Patch*>> commute (Tuple2<Patch*, Patch*> & p) {
+            /*
+                x ::
+                Darcs.Patch.V2.RepoPatch.RepoPatchV2
+                    Darcs.Patch.Prim.V1.Core.Prim wX wZ
+                y ::
+                Darcs.Patch.V2.RepoPatch.RepoPatchV2
+                    Darcs.Patch.Prim.V1.Core.Prim wZ wY
+                643      commute pair@(x :> y) =
+                644        commuteNoConflicts (assertConsistent x :> assertConsistent y)
+                645        `mplus`
+                646        commuteConflicting pair
+                647  
+                ... [src/Darcs/Patch/V2/RepoPatch.hs:(644,7)-(646,29)] darcs>
+            */
         }
         static Maybe<Tuple2<FL<Patch*>, FL<Patch*>>> commute (Tuple2<FL<Patch*>, FL<Patch*>> & p) {
             if (p.v1.isNil()) {
