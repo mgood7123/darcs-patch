@@ -59,44 +59,52 @@ namespace DarcsPatch {
     //
     // this means we can transform the generic/template into a static class and utilize function overload resolution
 
+    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> CommuteRLFL(const Tuple2<RL<Patch*>, FL<Patch*>> & p);
+
     struct Commute {
 
-        static Maybe<Tuple2<FL<Patch>, FL<Patch>>> commute (Tuple2<FL<Patch>, FL<Patch>> & p) {
+        static Maybe<Tuple2<FL<Patch*>, FL<Patch*>>> commute (Tuple2<FL<Patch*>, FL<Patch*>> & p) {
             if (p.v1.isNil()) {
                 return {{p.v2, p.v1};
             }
             if (p.v2.isNil()) {
                 return {{p.v2, p.v1};
             }
-            // ...
-            return Nothing();
+            auto tmp = CommuteRLFL(ToRL(p.v1), p.v2);
+            if (!tmp.has_value) {
+                return tmp;
+            }
+            auto ys1 = tmp.v1;
+            auto rsx = tmp.v2;
+            return {{ys1, ToFL(rsx)}};
         }
-            /*
-                // this is called with the following
-                
-                [-2: src/Darcs/Patch/PatchInfoAnd.hs:266:40-49] darcs> patch2patchinfo x1
+        
+        /*
+            // this is called with the following
+            
+            [-2: src/Darcs/Patch/PatchInfoAnd.hs:266:40-49] darcs> patch2patchinfo x1
 
-                PatchInfo {
-                    _piDate = "20230508084629",
-                    _piName = "TAG refs/branches/master",
-                    _piAuthor = "smallville7123 <smallville7123@gmail.com>",
-                    _piLog = ["Ignore-this: e6e67f33f9d47f7725b0f23a22a9f112"],
-                    _piLegacyIsInverted = False
-                }
+            PatchInfo {
+                _piDate = "20230508084629",
+                _piName = "TAG refs/branches/master",
+                _piAuthor = "smallville7123 <smallville7123@gmail.com>",
+                _piLog = ["Ignore-this: e6e67f33f9d47f7725b0f23a22a9f112"],
+                _piLegacyIsInverted = False
+            }
 
 
 
-                [-2: src/Darcs/Patch/PatchInfoAnd.hs:266:40-49] darcs> patch2patchinfo y1
+            [-2: src/Darcs/Patch/PatchInfoAnd.hs:266:40-49] darcs> patch2patchinfo y1
 
-                PatchInfo {
-                    _piDate = "20230508084629",
-                    _piName = "TAG refs/branches/master",
-                    _piAuthor = "smallville7123 <smallville7123@gmail.com>",
-                    _piLog = ["Ignore-this: 6915e596e1147deec72d6421d15982c9"],
-                    _piLegacyIsInverted = False
-                }
-            */
-        static Maybe<Tuple2<Named<Patch>, Named<Patch>>> commute (Tuple2<Named<Patch>, Named<Patch>> & p) {
+            PatchInfo {
+                _piDate = "20230508084629",
+                _piName = "TAG refs/branches/master",
+                _piAuthor = "smallville7123 <smallville7123@gmail.com>",
+                _piLog = ["Ignore-this: 6915e596e1147deec72d6421d15982c9"],
+                _piLegacyIsInverted = False
+            }
+        */
+        static Maybe<Tuple2<Named<Patch*>, Named<Patch*>>> commute (Tuple2<Named<Patch*>, Named<Patch*>> & p) {
             /*
                 src/Darcs/Patch/Named.hs line 168
 
@@ -234,6 +242,7 @@ namespace DarcsPatch {
     */
 
     using CommuteFn = std::function<Maybe<Tuple2<FL<PatchInfoAndG>, PatchInfoAndG>> (Tuple2<PatchInfoAndG, FL<PatchInfoAndG>>)>;
+    using CommuteFn2 = std::function<Maybe<Tuple2<Patch*, RL<Patch*>>> (Tuple2<RL<Patch*>, Patch*>)>;
 
     Maybe<Tuple2<FL<PatchInfoAndG>, PatchInfoAndG>> CommuteIdFL(const CommuteFn & commuter, const Tuple2<PatchInfoAndG, FL<PatchInfoAndG>> & p) {
         if (p.v2.isNil()) {
@@ -254,12 +263,90 @@ namespace DarcsPatch {
         if (!tmp1.has_value) {
             return tmp1;
         }
-        FL<PatchInfoAndG> ys1 = tmp1->first;
-        PatchInfoAndG x2 = tmp1->second;
+        FL<PatchInfoAndG> ys1 = tmp1->v1;
+        PatchInfoAndG x2 = tmp1->v2;
         return {ys1.append(y1), x2};
     }
 
     Maybe<Tuple2<FL<PatchInfoAndG>, PatchInfoAndG>> CommuteFL(const Tuple2<PatchInfoAndG, FL<PatchInfoAndG>> & p) {
         return commuterIdFL(Commute::commute, p);
+    }
+
+    Maybe<Tuple2<Patch*, RL<Patch*>> commuterRLId(const CommuteFn & commuter, const Tuple2<RL<Patch*>, Patch*> & p) {
+        if (p.v1.isNil()) {
+            return {p.v2, p.v1};
+        }
+        Patch* y = p.v2;
+        Patch* x;
+        RL<Patch*> xs;
+        p.v1.extract(x, xs);
+
+        auto tmp = commuter({x, y}); // at this point, we are just metadata + hash
+        if (!tmp.has_value) {
+            return tmp;
+        }
+        Patch* y1 = tmp->v1;
+        Patch* x1 = tmp->v2;
+        auto tmp1 = commuterRLId(commuter, {xs, y1});
+        if (!tmp1.has_value) {
+            return tmp1;
+        }
+        Patch* y2 = tmp1->v1;
+        RL<Patch*> xs1 = tmp1->v2;
+        return {y2, xs1.append(x1)};
+    }
+
+    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> left(const CommuteFn & commuter, const RL<Patch*> & p1, const FL<Patch*> & p2);
+
+    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> right(const CommuteFn & commuter, const RL<Patch*> & p1, const FL<Patch*> & p2) {
+        RL<Patch*> & as = p1;
+        if (p2.isNil()) {
+            return {{p2, as}};
+        }
+        FL<Patch*> bs;
+        Patch * b;
+        p2.extract(b, bs);
+        auto tmp = commuterRLId(commuter, {as, b});
+        if (!tmp.has_value) {
+            return tmp;
+        }
+        auto b1 = tmp.v1;
+        auto as1 = tmp.v2;
+        auto tmp1 = left(commuter, as1, bs);
+        if (!tmp1.has_value) {
+            return tmp1;
+        }
+        auto bs1 = tmp.v1;
+        auto as2 = tmp.v2;
+        return {{bs1.append(b1), as2}};
+    }
+    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> left(const CommuteFn & commuter, const RL<Patch*> & p1, const FL<Patch*> & p2) {
+        FL<Patch*> & bs = p2;
+        if (p1.isNil()) {
+            return {{bs, p1}};
+        }
+        FL<Patch*> as;
+        Patch * a;
+        p1.extract(a, as);
+        auto tmp = commuterIdFL(commuter, {a, bs});
+        if (!tmp.has_value) {
+            return tmp;
+        }
+        auto bs1 = tmp.v1;
+        auto a1 = tmp.v2;
+        auto tmp1 = right(commuter, as, bs1);
+        if (!tmp1.has_value) {
+            return tmp1;
+        }
+        auto bs2 = tmp.v1;
+        auto as1 = tmp.v2;
+        return {bs2, {as1.append(a1)}};
+    }
+    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> CommuterRLFL(const CommuteFn & commuter, const RL<Patch*> & xs, const FL<Patch*> & ys) {
+        return right(commuter, xs, ys);
+    }
+
+    Maybe<Tuple2<FL<Patch*>, RL<Patch*>>> CommuteRLFL(const Tuple2<RL<Patch*>, FL<Patch*>> & p) {
+        return commuterRLFL(Commute::commute, p);
     }
 }

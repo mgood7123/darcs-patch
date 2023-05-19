@@ -126,7 +126,7 @@ namespace DarcsPatch {
             PatchInfoAndG q;
             RL<PatchInfoAndG> qs;
             arg.extract(q, qs);
-            PatchId j = q.n.p.ident();
+            PatchId j = q.n.p->ident();
             
             Set<PatchId> & direct = acc.v1;
             Set<PatchId> & indirect = acc.v2;
@@ -245,7 +245,7 @@ namespace DarcsPatch {
             //
             // code here
             
-            auto j2 = p.n.p.ident();
+            auto j2 = p.n.p->ident();
             auto folded = foldDeps(ps, {p}, {}, {}, m);
             
             m.insert(j2, folded);
@@ -253,8 +253,9 @@ namespace DarcsPatch {
         }
         
         Map<PatchId, Dep> depsGraph(const std::deque<Patch> & ps) {
-            RL<Patch> p;
-            for(const Patch & patch : ps) p = p.append(patch);
+            // patches are already allocated in deque
+            RL<PatchInfoAndG> p;
+            for(const Patch & patch : ps) p = p.append({&patch});
             return depsGraph({}, p);
         }
         

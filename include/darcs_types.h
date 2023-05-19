@@ -461,22 +461,22 @@ namespace DarcsPatch {
 
     template <typename T>
     struct Named {
+        T n;
         FL<T> d;
         FL<T> p;
-        T n;
-        Named(const FL<T> & d, const FL<T> & p, const T & n) {
+        Named(const T & n, const FL<T> & d, const FL<T> & p) {
+            this->n = n;
             this->d = d;
             this->p = p;
-            this->n = n;
         }
     };
-    
+
     struct PatchInfoAndG {
-        Named<Patch> n;
-        PatchInfoAndG(Patch p) {
-            n = {{}, {}, p};
+        Named<Patch*> n;
+        PatchInfoAndG(Patch* p) {
+            n = {p, {}, {}};
         }
-        PatchInfoAndG(Named<Patch> n) {
+        PatchInfoAndG(Named<Patch*> n) {
             this->n = n;
         }
     };
