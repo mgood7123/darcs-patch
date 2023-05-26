@@ -63,7 +63,26 @@ namespace DarcsPatch {
 
     struct Commute {
 
-        static Maybe<Tuple2<Patch*, Patch*>> commute (Tuple2<Patch*, Patch*> & p) {
+        Maybe<Patch*> isConsistent(Patch* prim) {
+            switch(prim->v2_prim) {
+                case NORMAL:
+                case DUPLICATE:
+                case ETACILPUD:
+                    return Nothing();
+                case INV_CONFLICTOR:
+                    {
+                        return isConsistent(invert(prim));
+                    }
+                default:
+                    return {prim};
+            };
+        }
+
+        static Patch* assertConsistent(Patch* x) {
+            auto e = isConsistent(x);
+        }
+
+        static Maybe<Tuple2<Patch*, Patch*>> commute (Tuple2<Patch*, Patch*> & pair) {
             /*
                 x ::
                 Darcs.Patch.V2.RepoPatch.RepoPatchV2
@@ -78,6 +97,10 @@ namespace DarcsPatch {
                 647  
                 ... [src/Darcs/Patch/V2/RepoPatch.hs:(644,7)-(646,29)] darcs>
             */
+
+            Patch * x = pair.v1;
+            Patch * y = pair.v2;
+
         }
         static Maybe<Tuple2<FL<Patch*>, FL<Patch*>>> commute (Tuple2<FL<Patch*>, FL<Patch*>> & p) {
             if (p.v1.isNil()) {

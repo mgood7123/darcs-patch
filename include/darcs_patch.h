@@ -5,7 +5,7 @@
 #include "darcs_commute.h"
 
 namespace DarcsPatch {
-    template <typename char_t, typename adapter_t, typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type* = nullptr>
+    template <typename char_t, typename adapter_t, typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type>
     struct Patcher {
         std::deque<Patch> hunks;
         
@@ -183,6 +183,7 @@ namespace DarcsPatch {
             if (ps.isNil()) {
                 return m;
             }
+
             PatchInfoAndG p;
             RL<PatchInfoAndG> ps;
             arg.extract(x, xs);
