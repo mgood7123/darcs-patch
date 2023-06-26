@@ -1,0 +1,9 @@
+[submodule "googletest"]
+	path = googletest
+	url = https://github.com/google/googletest
+[submodule "hash-library"]
+	path = hash-library
+	url = https://github.com/stbrumme/hash-library
+[submodule "StringAdapter"]
+	path = StringAdapter
+	url = https://github.com/mgood7123/StringAdapter

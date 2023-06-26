@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DARCS_PATCH_TYPES_H
+#define DARCS_PATCH_TYPES_H
 
 #include <deque>
 #include <optional>
@@ -6,15 +7,23 @@
 #include <stdexcept>
 #include <algorithm>
 #include <iostream>
+#include <vector>
 #include <set>
 #include <map>
-#include "adapter.h"
+
+#include <indexed_iterator.h>
+#include <string_adapter.h>
+#include <list>
+#include <forward_list>
+#include <memory>
+
+#include <sha1.h>
 
 /*
 
--- enabling stuff seems to mess with the debugger
-:load darcs/MemHunk.hs
+-- enabling stuff seems to mess with the haskell debugger
 :set -v3
+:load darcs/MemHunk.hs
 :set stop :list
 import MemHunk
 :b makeHunk
@@ -25,333 +34,963 @@ import MemHunk
 namespace DarcsPatch {
 
     template <typename T1, typename T2>
-    struct Tuple2 {
+    struct Tuple2 :
+        public StringAdapter::Comparable<Tuple2<T1, T2>>,
+        public StringAdapter::Hashable<Tuple2<T1, T2>>
+    {
+        using THIS = Tuple2<T1, T2>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
+
+        Tuple2() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::v1, &THIS::v2); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::v1, &THIS::v2); })
+        {}
+
         T1 v1;
         T2 v2;
-        Tuple2(const T1 & t1, const T2 & t2) {
-            v1 = t1;
-            v2 = t2;
+
+        Tuple2(const std::pair<T1, T2> & pair) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::v1, &THIS::v2); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::v1, &THIS::v2); }),
+            v1(pair.first),
+            v2(pair.second)
+        {}
+
+        Tuple2(const T1 & t1, const T2 & t2) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::v1, &THIS::v2); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::v1, &THIS::v2); }),
+            v1(t1),
+            v2(t2)
+        {
+        }
+
+        void to_string() const {
+            std::cout << *this;
+        }
+
+        void to_string() {
+            std::cout << *this;
         }
     };
 
     template <typename T1, typename T2, typename T3>
-    struct Tuple3 {
+    struct Tuple3 :
+        public StringAdapter::Comparable<Tuple3<T1, T2, T3>>,
+        public StringAdapter::Hashable<Tuple3<T1, T2, T3>>
+    {
+        using THIS = Tuple3<T1, T2, T3>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
+
+        Tuple3() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::v1, &THIS::v2, &THIS::v3); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::v1, &THIS::v2, &THIS::v3); })
+        {}
+
         T1 v1;
         T2 v2;
         T3 v3;
-        Tuple3(const T1 & t1, const T2 & t2, const T3 & t3) {
-            v1 = t1;
-            v2 = t2;
-            v3 = t3;
+
+        Tuple3(const T1 & t1, const T2 & t2, const T3 & t3) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::v1, &THIS::v2, &THIS::v3); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::v1, &THIS::v2, &THIS::v3); }),
+            v1(t1),
+            v2(t2),
+            v3(t3)
+        {}
+
+        void to_string() const {
+            std::cout << *this;
+        }
+        
+        void to_string() {
+            std::cout << *this;
         }
     };
 
-    enum ListConst { CONS, SNOC, NIL };
-
-    template <typename T, typename LIST>
-    struct List {
-        const ListConst tag;
-        struct CONS {
-            const T head;
-            const List<T, LIST> * tail;
-            CONS() : head(T()), tail(nullptr) {}
-            CONS(const T head, const List<T, LIST> * tail) : head(head), tail(tail) {}
-        } const dataCONS;
-        struct SNOC {
-            // this is the only variable in RL that MUST be mutable
-            const mutable List<T, LIST> * head;
-            const T tail;
-            SNOC() : head(nullptr), tail(T()) {}
-            SNOC(const List<T, LIST> * head, const T tail) : head(head), tail(tail) {}
-        } const dataSNOC;
-        
-        const LIST * list;
-        List() : tag(NIL), list(nullptr), dataCONS({}), dataSNOC({}) {}
-        List(const LIST * list) : tag(NIL), list(list), dataCONS({}), dataSNOC({}) {}
-        List(const ListConst tag, const LIST * list) : tag(tag), list(list), dataCONS({}), dataSNOC({}) {}
-        List(const LIST * list, const CONS cons) : tag(ListConst::CONS), list(list), dataCONS(cons), dataSNOC({}) {}
-        List(const LIST * list, const SNOC snoc) : tag(ListConst::SNOC), list(list), dataCONS({}), dataSNOC(snoc) {}
-        List(const LIST * list, const List<T, LIST> * list_) : tag(list_->tag), list(list), dataCONS(list_->dataCONS), dataSNOC(list_->dataSNOC) {}
-        virtual ~List() {}
-    };
-
-    template <typename T>
-    struct FL;
-    template <typename T>
-    struct RL;
+    template <typename T> struct FL;
+    template <typename T> struct RL;
 
     struct NilFL_T {
         template <typename T>
-        const FL<T> append(const T & value) const;
+        const FL<T> push(const T & value) const;
+    };
+
+    struct NilRL_T {
+        template <typename T>
+        const RL<T> push(const T & value) const;
     };
 
     extern const NilFL_T NilFL;
+    extern const NilRL_T NilRL;
+
+    template <typename T, typename O>
+    class Slice :
+        public StringAdapter::Comparable<Slice<T, O>>,
+        public StringAdapter::Hashable<Slice<T, O>>
+    {
+        using THIS = Slice<T, O>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
+
+        O * origin = nullptr;
+        std::size_t start_ = 0;
+        std::size_t end_ = 0;
+
+        public:
+
+        Slice() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3_iterator(a, b, &THIS::cbegin, &THIS::cend); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3_iterator<THIS, T>(a); })
+        {}
+
+        Slice(O* origin, std::size_t start, std::size_t end) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3_iterator(a, b, &THIS::cbegin, &THIS::cend); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3_iterator<THIS, T>(a); }),
+            origin(origin),
+            start_(start),
+            end_(start < end ? end : start)
+        {
+        }
+
+        ~Slice() {
+        }
+
+        using iterator = IndexedIterator::iterator<O, T>;
+
+        iterator begin() {
+            return iterator(origin, start_);
+        }
+
+        iterator end() {
+            return iterator(origin, start_ == end_ ? start_ : end_);
+        }
+
+        using const_iterator = IndexedIterator::iterator<const O, const T>;
+
+        const const_iterator cbegin() const {
+            return const_iterator(origin, start_);
+        }
+
+        const const_iterator cend() const {
+            return const_iterator(origin, start_ == end_ ? start_ : end_);
+        }
+
+        const const_iterator begin() const {
+            return cbegin();
+        }
+
+        const const_iterator end() const {
+            return cend();
+        }
+
+        T & operator[] (const std::size_t index) {
+            return origin->operator[](start_ + index);
+        }
+
+        const std::size_t get_start() {
+            return start_;
+        };
+
+        const std::size_t get_end() {
+            return end_;
+        };
+
+        const std::size_t size() const {
+            return end_ - start_;
+        }
+
+        O* get_origin() {
+            return origin;
+        }
+
+        protected:
+        O* get_origin_() {
+            return origin;
+        };
+    };
+    
+    template <typename T, typename O>
+    class CSlice :
+        public StringAdapter::Comparable<CSlice<T, O>>,
+        public StringAdapter::Hashable<CSlice<T, O>>
+    {
+        using THIS = CSlice<T, O>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
+
+        const O * origin = nullptr;
+        std::size_t start_ = 0;
+        std::size_t end_ = 0;
+
+        public:
+
+        CSlice() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3_iterator(a, b, &THIS::cbegin, &THIS::cend); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3_iterator<THIS, T>(a); })
+        {}
+
+        CSlice(const O* origin, const std::size_t start, const std::size_t end) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3_iterator(a, b, &THIS::cbegin, &THIS::cend); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3_iterator<THIS, T>(a); }),
+            origin(origin),
+            start_(start),
+            end_(start < end ? end : start)
+        {
+        }
+
+        ~CSlice() {
+        }
+
+        using iterator = IndexedIterator::iterator<O, T>;
+
+        iterator begin() {
+            return iterator(origin, start_);
+        }
+
+        iterator end() {
+            return iterator(origin, start_ == end_ ? start_ : end_);
+        }
+
+        using const_iterator = IndexedIterator::iterator<const O, const T>;
+
+        const const_iterator cbegin() const {
+            return const_iterator(origin, start_);
+        }
+
+        const const_iterator cend() const {
+            return const_iterator(origin, start_ == end_ ? start_ : end_);
+        }
+
+        const const_iterator begin() const {
+            return cbegin();
+        }
+
+        const const_iterator end() const {
+            return cend();
+        }
+
+        const std::size_t get_start() {
+            return start_;
+        };
+
+        const std::size_t get_end() {
+            return end_;
+        };
+
+        const T & operator[] (const std::size_t index) const {
+            return origin->operator[](start_ + index);
+        }
+
+        const std::size_t size() const {
+            return end_ - start_;
+        }
+
+        const O* get_origin() {
+            return origin;
+        }
+
+        protected:
+        const O* get_origin_() {
+            return origin;
+        };
+    };
 
     template <typename T>
-    struct FL {
-        // needs to be mutable for assignments to work
-        mutable List<T, FL<T>> * h;
+    struct FL_BASE {
+        
+        typedef T TYPE;
+        mutable std::forward_list<T> list;
+        mutable std::size_t len;
+        
+        FL_BASE() {
+            list = {};
+            len = 0;
+        }
 
-        FL() : h(new List<T, FL<T>>(NIL, this)) {};
-        FL(const NilFL_T) : h(new List<T, FL<T>>(NIL, this)) {};
-
-        FL(const List<T, FL<T>> * h) : h(new List<T, FL<T>>(this, h)) {};
-
-        FL(const FL & other) : h(new List<T, FL<T>>(this, other.h)) {}
-
-        const FL<T> operator=(const FL & other) const {
-            h = new List<T, FL<T>>(this, other.h);
+        FL_BASE(const FL_BASE & other) {
+            list = other.list;
+            len = other.len;
+        }
+        
+        const FL_BASE & operator =(const FL_BASE & other) {
+            list = other.list;
+            len = other.len;
             return *this;
+        }
+        
+        FL_BASE(FL_BASE && other) {
+            list = std::move(other.list);
+            len = std::move(other.len);
+        }
+        
+        const FL_BASE & operator =(FL_BASE && other) {
+            list = std::move(other.list);
+            len = std::move(other.len);
+            return *this;
+        }
+
+        using iterator = IndexedIterator::iterator<FL_BASE<T>, T>;
+        using const_iterator = IndexedIterator::iterator<const FL_BASE<T>, const T>;
+
+        iterator begin() {
+            return iterator(this, 0);
+        }
+
+        iterator end() {
+            return iterator(this, length()+1);
+        }
+
+        const const_iterator cbegin() const {
+            return const_iterator(this, 0);
+        }
+
+        const const_iterator cend() const {
+            return const_iterator(this, length()+1);
+        }
+
+        const const_iterator begin() const {
+            return cbegin();
+        }
+
+        const const_iterator end() const {
+            return cend();
+        }
+
+        Slice<T, FL_BASE<T>>* slice(std::size_t start, std::size_t end) {
+            if (start == 0 && end == 0 && len == 0) {
+            } else {
+                if (start >= len) {
+                    return slice(0, 0);
+                }
+                if (end > len) {
+                    throw new std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                }
+            }
+            return new Slice<T, FL_BASE<T>>(this, start, end);
+        }
+        const CSlice<T, FL_BASE<T>>* cslice(std::size_t start, std::size_t end) {
+            if (start == 0 && end == 0 && len == 0) {
+            } else {
+                if (start >= len) {
+                    return slice(0, 0);
+                }
+                if (end > len) {
+                    throw new std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                }
+            }
+            return new CSlice<T, FL_BASE<T>>(this, start, end);
+        }
+        const CSlice<T, FL_BASE<T>>* slice(std::size_t start, std::size_t end) const {
+            if (start == 0 && end == 0 && len == 0) {
+            } else {
+                if (start >= len) {
+                    return slice(0, 0);
+                }
+                if (end > len) {
+                    throw new std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                }
+            }
+            return new CSlice<T, FL_BASE<T>>(this, start, end);
+        }
+        
+        T & get_item_at_index(const std::size_t index) {
+            if (index >= len) {
+                throw new std::runtime_error("INDEX OUT OF RANGE");
+            }
+            return *std::next(list.begin(), index);
+        }
+        const T & get_item_at_index(const std::size_t index) const {
+            if (index >= len) {
+                throw new std::runtime_error("INDEX OUT OF RANGE");
+            }
+            return *std::next(list.begin(), index);
+        }
+        
+        T & operator[] (const std::size_t index) {
+            return get_item_at_index(index);
+        };
+
+        const T & operator[] (const std::size_t index) const {
+            return get_item_at_index(index);
+        };
+        
+        const std::size_t length() const {
+            return len;
+        }
+        
+        const std::size_t size() const {
+            return length();
+        }
+        
+        const bool operator == (const FL_BASE<T> & other) const {
+            const std::size_t max = length();
+            if (max != other.length()) {
+                return false;
+            }
+            for (std::size_t i = 0; i < max; i++) {
+                if (operator[](i) != other.operator[](i)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        const bool operator != (const FL_BASE<T> & other) const {
+            return !(*this == other);
+        }
+
+        void emplace(const T & item) {
+            list.emplace_front(item);
+            len++;
+        }
+
+        ~FL_BASE() {
+        }
+    };
+
+    template <typename T>
+    struct RL_BASE {
+        typedef T TYPE;
+        mutable std::list<T> list;
+        mutable std::size_t len;
+        
+        RL_BASE() {
+            list = {};
+            len = 0;
+        }
+
+        RL_BASE(const RL_BASE & other) {
+            list = other.list;
+            len = other.len;
+        }
+        
+        const RL_BASE & operator =(const RL_BASE & other) {
+            list = other.list;
+            len = other.len;
+            return *this;
+        }
+        
+        RL_BASE(RL_BASE && other) {
+            list = std::move(other.list);
+            len = std::move(other.len);
+        }
+        
+        const RL_BASE & operator =(RL_BASE && other) {
+            list = std::move(other.list);
+            len = std::move(other.len);
+            return *this;
+        }
+
+        using iterator = IndexedIterator::iterator<RL_BASE<T>, T>;
+        using const_iterator = IndexedIterator::iterator<const RL_BASE<T>, const T>;
+
+        iterator begin() {
+            return iterator(this, 0);
+        }
+
+        iterator end() {
+            return iterator(this, length()+1);
+        }
+
+        const const_iterator cbegin() const {
+            return const_iterator(this, 0);
+        }
+
+        const const_iterator cend() const {
+            return const_iterator(this, length()+1);
+        }
+
+        const const_iterator begin() const {
+            return cbegin();
+        }
+
+        const const_iterator end() const {
+            return cend();
+        }
+
+        Slice<T, RL_BASE<T>>* slice(std::size_t start, std::size_t end) {
+            if (start == 0 && end == 0 && len == 0) {
+            } else {
+                if (start >= len) {
+                    return slice(0, 0);
+                }
+                if (end > len) {
+                    throw new std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                }
+            }
+            return new Slice<T, RL_BASE<T>>(this, start, end);
+        }
+        const CSlice<T, RL_BASE<T>>* cslice(std::size_t start, std::size_t end) {
+            if (start == 0 && end == 0 && len == 0) {
+            } else {
+                if (start >= len) {
+                    return slice(0, 0);
+                }
+                if (end > len) {
+                    throw new std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                }
+            }
+            return new CSlice<T, RL_BASE<T>>(this, start, end);
+        }
+        const CSlice<T, RL_BASE<T>>* slice(std::size_t start, std::size_t end) const {
+            if (start == 0 && end == 0 && len == 0) {
+            } else {
+                if (start >= len) {
+                    return slice(0, 0);
+                }
+                if (end > len) {
+                    throw new std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                }
+            }
+            return new CSlice<T, RL_BASE<T>>(this, start, end);
+        }
+
+        T & get_item_at_index(const std::size_t index) {
+            if (index >= len) {
+                throw new std::runtime_error("INDEX OUT OF RANGE");
+            }
+            return *std::next(list.begin(), index);
+        }
+        const T & get_item_at_index(const std::size_t index) const {
+            if (index >= len) {
+                throw new std::runtime_error("INDEX OUT OF RANGE");
+            }
+            return *std::next(list.begin(), index);
+        }
+        
+        T & operator[] (const std::size_t index) {
+            return get_item_at_index(index);
+        };
+
+        const T & operator[] (const std::size_t index) const {
+            return get_item_at_index(index);
+        };
+        
+        const std::size_t length() const {
+            return len;
+        }
+        
+        const std::size_t size() const {
+            return length();
+        }
+        
+        const bool operator == (const RL_BASE<T> & other) const {
+            const std::size_t max = length();
+            if (max != other.length()) {
+                return false;
+            }
+            for (std::size_t i = 0; i < max; i++) {
+                if (operator[](i) != other.operator[](i)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        const bool operator != (const RL_BASE<T> & other) const {
+            return !(*this == other);
+        }
+
+        void emplace(const T & item) {
+            list.emplace_back(item);
+            len++;
+        }
+
+        ~RL_BASE() {
+        }
+    };
+
+    template <typename T>
+    struct FL :
+        public StringAdapter::Comparable<FL<T>>,
+        public StringAdapter::Hashable<FL<T>>
+    {
+        using THIS = FL<T>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
+
+        FL() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3_iterator(a, b, &THIS::cbegin, &THIS::cend); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3_iterator<FL<T>, T>(a); })
+        {
+            base = std::make_shared<FL_BASE<T>>();
+            slice = base->slice(0, 0);
+        }
+
+        std::shared_ptr<FL_BASE<T>> base;
+        Slice<T, FL_BASE<T>> * slice = nullptr;
+
+        void to_string() const {
+            std::cout << *this;
+        }
+        
+        void to_string() {
+            std::cout << *this;
+        }
+
+        T & operator[] (const std::size_t index) {
+            return slice->operator[](index);
+        }
+
+        const T & operator[] (const std::size_t index) const {
+            return slice->operator[](index);
+        }
+
+        typename Slice<T, FL_BASE<T>>::iterator begin() {
+            return slice->begin();
+        }
+
+        typename Slice<T, FL_BASE<T>>::iterator end() {
+            return slice->end();
+        }
+
+        const typename Slice<T, FL_BASE<T>>::const_iterator cbegin() const {
+            return slice->cbegin();
+        }
+
+        const typename Slice<T, FL_BASE<T>>::const_iterator cend() const {
+            return slice->cend();
+        }
+
+        const typename Slice<T, FL_BASE<T>>::const_iterator begin() const {
+            return cbegin();
+        }
+
+        const typename Slice<T, FL_BASE<T>>::const_iterator end() const {
+            return cend();
+        }
+
+        FL(const std::initializer_list<T> & list) : FL() {
+            std::size_t size = 0;
+            for(const T & item : list) {
+                base->emplace(item);
+                size++;
+            }
+            auto s = base->slice(0, slice->get_end()+size);
+            *slice = *s;
+            delete s;
+        }
+
+        FL(const NilFL_T & n) : FL() {
         }
 
         const bool operator == (const NilFL_T & other) const {
-            return !iterator().has_next();
+            return slice->get_start() == 0 && slice->get_end() == 0;
         }
 
-        const FL<T> append(const T & value) const {
-            // we are immutable
-            // return a new instance
-            // that links to this (h)
-            //
-            // this would prepend
-            // [h] -> [a, h]
-            //
-            return FL<T>(new List<T, FL<T>>(this, {value, h}));
-        }
-
-        struct Iterator {
-            const FL<T> * i;
-            mutable const List<T, FL<T>> * ptr;
-
-            Iterator(const FL<T> * i) : i(i), ptr(i->h) {}
-
-
-            const bool has_next() const {
-                return ptr->tag != NIL;
-            }
-
-            const T & next() const {
-                if (!has_next()) {
-                    throw std::runtime_error("attempting to iterate an empty list");
-                }
-                const T & value = ptr->dataCONS.head;
-                ptr = ptr->dataCONS.tail;
-                return value;
-            }
-
-            const FL<T> * nextFL() const {
-                return ptr->list;
-            }
-        };
-
-        const Iterator iterator() const {
-            return Iterator(this);
-        }
-
-        void print(const char * id) const {
-            std::cout << id << " = [";
-            auto it = iterator();
-            if (it.has_next()) {
-                std::cout << it.next();
-                while (it.has_next()) {
-                    std::cout << ", " << it.next();
-                }
-            }
-            std::cout << "]" << std::endl;
-        }
-
-        const bool operator == (const FL<T> & other) const {
-            if (h->tag == other.h->tag) {
-                auto it1 = iterator();
-                auto it2 = other.iterator();
-                while (it1.has_next()) {
-                    if (it2.has_next()) {
-                        if (it1.next() != it2.next()) return false;
-                    } else {
-                        return false;
-                    }
-                }
-            }
-            return false;
-        }
-
-        const bool operator != (const FL<T> & other) const {
+        const bool operator != (const NilFL_T & other) const {
             return !(*this == other);
         }
 
-        const bool contains(const T & item) const {
-            auto it = iterator();
-            while (it.has_next()) {
-                if (it.next() == item) return true;
+        ~FL() {
+            delete slice;
+            slice = nullptr;
+        }
+
+        FL(const FL<T> & other) :StringAdapter::Comparable<FL<T>>(other),StringAdapter::Hashable<FL<T>>(other) {
+            base = other.base;
+            if (slice == nullptr) {
+                slice = base->slice(0, 0);
             }
-            return false;
+            *slice = *other.slice;
         }
 
-        const FL<T> & popFL() const {
-            auto it = iterator();
-            if (!it.has_next()) {
-                throw std::runtime_error("attempting to pop an empty list");
+        FL(FL<T> && other) :StringAdapter::Comparable<FL<T>>(std::move(other)),StringAdapter::Hashable<FL<T>>(std::move(other)) {
+            base = std::move(other.base);
+            if (slice == nullptr) {
+                slice = base->slice(0, 0);
             }
-            return *it.nextFL();
+            *slice = *other.slice;
         }
 
-        const T & pop() const {
-            auto it = iterator();
-            if (!it.has_next()) {
-                throw std::runtime_error("attempting to pop an empty list");
-            }
-            return it.next();
-        }
-
-        void extract(T & x, FL<T> & xs) const {
-            x = pop();
-            xs = popFL();
-        }
-    };
-
-    template <typename T>
-    const FL<T> NilFL_T::append(const T & value) const {
-        return FL<T>().append(value);
-    }
-        
-    struct NilRL_T {
-        template <typename T>
-        const RL<T> append(const T & value) const;
-    };
-
-    extern const NilRL_T NilRL;
-
-    template <typename T>
-    struct RL {
-        // needs to be mutable for assignments to work
-        mutable List<T, RL<T>> *h = nullptr;
-        const mutable List<T, RL<T>> *start = nullptr;
-        const mutable List<T, RL<T>> *end = nullptr;
-
-        RL() : h(new List<T, RL<T>>(NIL, this)), start(h), end(start) {};
-        RL(const NilRL_T) : h(new List<T, RL<T>>(NIL, this)), start(h), end(start) {};
-        
-        RL(const List<T, RL<T>> * h, const List<T, RL<T>> * start, const List<T, RL<T>> * end) : h(new List<T, RL<T>>(this, h)), start(start), end(end) {};
-
-        RL(const RL & other) : h(new List<T, RL<T>>(this, other.h)), start(other.start), end(other.end) {}
-
-        const RL<T> operator=(const RL & other) const {
-            h = new List<T, RL<T>>(this, other.h);
-            start = other.start;
-            end = other.end;
+        FL<T> & operator =(const FL<T> & other) {
+           StringAdapter::Comparable<FL<T>>::operator =(other);
+           StringAdapter::Hashable<FL<T>>::operator =(other);
+            base = other.base;
+            *slice = *other.slice;
             return *this;
         }
 
-        const bool operator == (const NilRL_T & other) const {
-            return !iterator().has_next();
-        }
-
-        const RL<T> append(const T & value) const {
-
-            // this would append
-            // [] -> [h] -> [h, a]
-
-            end->dataSNOC.head = new List<T, RL<T>>(this, {nullptr, value});
-
-            // we are immutable
-            // return a new instance
-            // that links to this
-            return RL<T>(h, start, end->dataSNOC.head);
-        }
-
-        struct Iterator {
-            const RL<T> * i;
-            mutable const List<T, RL<T>> * ptr;
-
-            Iterator(const RL<T> * i) : i(i), ptr(i->start) {}
-
-
-            const bool has_next() const {
-                return ptr != i->end;
+        FL<T> & operator =(FL<T> && other) {
+           StringAdapter::Comparable<FL<T>>::operator =(std::move(other));
+           StringAdapter::Hashable<FL<T>>::operator =(std::move(other));
+            base = std::move(other.base);
+            if (slice == nullptr) {
+                slice = base->slice(0, 0);
             }
+            *slice = *other.slice;
+            return *this;
+        }
 
-            const T & next() const {
-                if (!has_next()) {
-                    throw std::runtime_error("attempting to iterate an empty list");
+        const std::size_t size() const {
+            return slice->size();
+        }
+
+        FL push(const T & item) const {
+            FL copy;
+            if (slice->get_end() != base->length()) {
+                auto b = slice->begin();
+                auto e = slice->end();
+                for (; b != e; ++b) {
+                    copy.base->emplace(*b);
                 }
-                ptr = ptr->dataSNOC.head;
-                return ptr->dataSNOC.tail;
+            } else {
+                copy.base = base;
             }
-
-            const RL<T> * nextRL() const {
-                ptr = ptr->dataSNOC.head;
-                return ptr->list;
-            }
-        };
-
-        const Iterator iterator() const {
-            return Iterator(this);
+            copy.base->emplace(item);
+            auto s = copy.base->slice(0, slice->get_end()+1);
+            *copy.slice = *s;
+            delete s;
+            return copy;
         }
 
-        void print(const char * id) const {
+        FL push(const FL<T> & fl) const {
+            FL copy;
+            if (slice->get_end() != base->length()) {
+                auto b = slice->begin();
+                auto e = slice->end();
+                for (; b != e; ++b) {
+                    copy.base->emplace(*b);
+                }
+            } else {
+                copy.base = base;
+            }
+            for(const T & item : fl) {
+                copy.base->emplace(item);
+            }
+            auto s = copy.base->slice(0, slice->get_end()+fl.size());
+            *copy.slice = *s;
+            delete s;
+            return copy;
+        }
+
+        void print(const char * id) {
+            auto b = slice->begin();
+            auto e = slice->end();
             std::cout << id << " = [";
-            auto it = iterator();
-            if (it.has_next()) {
-                std::cout << it.next();
-                while (it.has_next()) {
-                    std::cout << ", " << it.next();
+            for (; b != e; ++b) {
+                std::cout << *b;
+                if (b+1 != e) {
+                    std::cout << ", ";
                 }
             }
-            std::cout << "]" << std::endl;
+            std::cout << "]\n";
         }
 
-        const bool operator == (const RL<T> & other) const {
-            if (h->tag == other.h->tag) {
-                auto it1 = iterator();
-                auto it2 = other.iterator();
-                while (it1.has_next()) {
-                    if (it2.has_next()) {
-                        if (it1.next() != it2.next()) return false;
-                    } else {
-                        return false;
-                    }
-                }
+        void extract(T & out_a, FL & out_fl) const {
+            if (base != out_fl.base) {
+                auto e = slice->begin();
+                auto & eo = *e;
+                out_a = eo;
+                out_fl.base = base;
+                auto s = base->slice(slice->get_start()+1, slice->get_end());
+                *out_fl.slice = *s;
+                delete s;
             }
-            return false;
-        }
-
-        const bool operator != (const RL<T> & other) const {
-            return !(*this == other);
-        }
-
-        const bool contains(const T & item) const {
-            auto it = iterator();
-            while (it.has_next()) {
-                if (it.next() == item) return true;
-            }
-            return false;
-        }
-
-        const RL<T> & popRL() const {
-            auto it = iterator();
-            if (!it.has_next()) {
-                throw std::runtime_error("attempting to pop an empty list");
-            }
-            return *it.nextRL();
-        }
-
-        const T & pop() const {
-            auto it = iterator();
-            if (!it.has_next()) {
-                throw std::runtime_error("attempting to pop an empty list");
-            }
-            return it.next();
-        }
-
-        void extract(T & x, RL<T> & xs) const {
-            x = pop();
-            xs = popRL();
         }
     };
 
     template <typename T>
-    const RL<T> NilRL_T::append(const T & value) const {
-        return RL<T>().append(value);
+    struct RL :
+        public StringAdapter::Comparable<RL<T>>,
+        public StringAdapter::Hashable<RL<T>>
+    {
+        using THIS = RL<T>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
+
+        RL() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3_iterator(a, b, &THIS::cbegin, &THIS::cend); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3_iterator<RL<T>, T>(a); })
+        {
+            base = std::make_shared<RL_BASE<T>>();
+            slice = base->slice(0, 0);
+        }
+
+        RL(const NilRL_T & n) : RL() {
+        }
+
+        const bool operator == (const NilRL_T & other) const {
+            return slice->get_start() == 0 && slice->get_end() == 0;
+        }
+
+        const bool operator != (const NilRL_T & other) const {
+            return !(*this == other);
+        }
+
+        void to_string() const {
+            std::cout << *this;
+        }
+        
+        void to_string() {
+            std::cout << *this;
+        }
+
+        T & operator[] (const std::size_t index) {
+            return slice->operator[](index);
+        }
+
+        const T & operator[] (const std::size_t index) const {
+            return slice->operator[](index);
+        }
+
+        typename Slice<T, RL_BASE<T>>::iterator begin() {
+            return slice->begin();
+        }
+
+        typename Slice<T, RL_BASE<T>>::iterator end() {
+            return slice->end();
+        }
+
+        const typename Slice<T, RL_BASE<T>>::const_iterator cbegin() const {
+            return slice->cbegin();
+        }
+
+        const typename Slice<T, RL_BASE<T>>::const_iterator cend() const {
+            return slice->cend();
+        }
+
+        const typename Slice<T, RL_BASE<T>>::const_iterator begin() const {
+            return cbegin();
+        }
+
+        const typename Slice<T, RL_BASE<T>>::const_iterator end() const {
+            return cend();
+        }
+
+        std::shared_ptr<RL_BASE<T>> base;
+        Slice<T, RL_BASE<T>> * slice = nullptr;
+        
+        RL(const std::initializer_list<T> & list) : RL() {
+            std::size_t size = 0;
+            for(const T & item : list) {
+                base->emplace(item);
+                size++;
+            }
+            auto s = base->slice(0, slice->get_end()+size);
+            *slice = *s;
+            delete s;
+        }
+
+        ~RL() {
+            delete slice;
+            slice = nullptr;
+        }
+
+        RL(const RL<T> & other) :StringAdapter::Comparable<RL<T>>(other),StringAdapter::Hashable<RL<T>>(other) {
+            base = other.base;
+            if (slice == nullptr) {
+                slice = base->slice(0, 0);
+            }
+            *slice = *other.slice;
+        }
+
+        RL(RL<T> && other) :StringAdapter::Comparable<RL<T>>(std::move(other)),StringAdapter::Hashable<RL<T>>(std::move(other)) {
+            base = std::move(other.base);
+            if (slice == nullptr) {
+                slice = base->slice(0, 0);
+            }
+            *slice = *other.slice;
+            other.base = nullptr;
+        }
+
+        RL<T> & operator =(const RL<T> & other) {
+           StringAdapter::Comparable<RL<T>>::operator =(other);
+           StringAdapter::Hashable<RL<T>>::operator =(other);
+            base = other.base;
+            *slice = *other.slice;
+            return *this;
+        }
+
+        RL<T> & operator =(RL<T> && other) {
+           StringAdapter::Comparable<RL<T>>::operator =(std::move(other));
+           StringAdapter::Hashable<RL<T>>::operator =(std::move(other));
+            base = std::move(other.base);
+            if (slice == nullptr) {
+                slice = base->slice(0, 0);
+            }
+            *slice = *other.slice;
+            return *this;
+        }
+
+        const std::size_t size() const {
+            return slice->size();
+        }
+
+        RL push(const T & item) const {
+            RL copy;
+            if (slice->get_end() != base->length()) {
+                auto b = slice->begin();
+                auto e = slice->end();
+                for (; b != e; ++b) {
+                    copy.base->emplace(*b);
+                }
+            } else {
+                copy.base = base;
+            }
+            copy.base->emplace(item);
+            auto s = copy.base->slice(0, slice->get_end()+1);
+            *copy.slice = *s;
+            delete s;
+            return copy;
+        }
+
+        RL push(const RL<T> & rl) const {
+            RL copy;
+            if (slice->get_end() != base->length()) {
+                auto b = slice->begin();
+                auto e = slice->end();
+                for (; b != e; ++b) {
+                    copy.base->emplace(*b);
+                }
+            } else {
+                copy.base = base;
+            }
+            for(const T & item : rl) {
+                copy.base->emplace(item);
+            }
+            auto s = copy.base->slice(0, slice->get_end()+rl.size());
+            *copy.slice = *s;
+            delete s;
+            return copy;
+        }
+
+        void print(const char * id) {
+            auto b = slice->begin();
+            auto e = slice->end();
+            std::cout << id << " = [";
+            for (; b != e; ++b) {
+                std::cout << *b;
+                if (b+1 != e) {
+                    std::cout << ", ";
+                }
+            }
+            std::cout << "]\n";
+        }
+
+        void extract(T & out_a, RL & out_rl) const {
+            if (base != out_rl.base) {
+                auto e = slice->end()-1;
+                auto & eo = *e;
+                out_a = eo;
+                out_rl.base = base;
+                auto s = base->slice(slice->get_start(), slice->get_end()-1);
+                *out_rl.slice = *s;
+                delete s;
+            }
+        }
+    };
+
+    template <typename T>
+    const FL<T> NilFL_T::push(const T & value) const {
+        return FL<T>().push(value);
+    }
+    
+    template <typename T>
+    const RL<T> NilRL_T::push(const T & value) const {
+        return RL<T>().push(value);
     }
 
     // in pattern matching, x :<: xs
@@ -364,45 +1003,43 @@ namespace DarcsPatch {
 
     template <typename T>
     static const FL<T> ToFL(const T & item) {
-        return NilFL.append(item);
+        return NilFL.push(item);
     }
 
     template <typename T>
     static const FL<T> ToFL(const std::vector<T> & vec) {
-        const FL<T> fl;
+        FL<T> fl;
         // avoid recursion
-        for (const T & item : vec) fl = fl.append(item);
+        for (const T & item : vec) fl = fl.push(item);
         return fl;
     }
 
     template <typename T>
     static const FL<T> ToFL(const RL<T> & rl) {
-        auto it = rl.iterator();
-        const FL<T> fl;
+        FL<T> fl;
         // avoid recursion
-        while (it.has_next()) fl = fl.append(it.next());
+        for (const T & item : rl) fl = fl.push(item);
         return fl;
     }
 
     template <typename T>
     static const RL<T> ToRL(const T & item) {
-        return NilRL.append(item);
+        return NilRL.push(item);
     }
 
     template <typename T>
     static const RL<T> ToRL(const std::vector<T> & vec) {
-        const RL<T> rl;
+        RL<T> rl;
         // avoid recursion
-        for (const T & item : vec) rl = rl.append(item);
+        for (const T & item : vec) rl = rl.push(item);
         return rl;
     }
 
     template <typename T>
     static const RL<T> ToRL(const FL<T> & fl) {
-        auto it = fl.iterator();
         // avoid recursion
-        const RL<T> rl;
-        while (it.has_next()) rl = rl.append(it.next());
+        RL<T> rl;
+        for (const T & item : fl) rl = rl.push(item);
         return rl;
     }
 
@@ -410,13 +1047,44 @@ namespace DarcsPatch {
     struct Nothing {};
 
     template <typename T>
-    struct Maybe {
+    struct Maybe :
+        public StringAdapter::Comparable<Maybe<T>>,
+        public StringAdapter::Hashable<Maybe<T>>
+    {
+        using THIS = Maybe<T>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
+
+        Maybe() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::has_value, &THIS::value); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::has_value, &THIS::value); }),
+            has_value(false)
+        {}
+
         bool has_value;
         T value;
 
-        Maybe() : has_value(false) {}
-        Maybe(const Nothing & nothing) : has_value(false) {}
-        Maybe(const T & value) : value(value), has_value(true) {}
+        void to_string() const {
+            std::cout << *this;
+        }
+        
+        void to_string() {
+            std::cout << *this;
+        }
+
+        Maybe(const Nothing & nothing) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::has_value, &THIS::value); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::has_value, &THIS::value); }),
+            has_value(false)
+        {}
+
+        Maybe(const T & value) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::has_value, &THIS::value); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::has_value, &THIS::value); }),
+            has_value(true),
+            value(value)
+        {
+        }
 
         const T & value_ref() const {
             if (!has_value) {
@@ -446,36 +1114,107 @@ namespace DarcsPatch {
             return value;
         }
 
-        const T & operator -> () const {
+        const T* operator -> () const {
             if (!has_value) {
                 throw std::runtime_error("attempting to obtain the value of nothing");
             }
-            return value;
+            return &value;
         }
 
-        T & operator -> () {
+        T* operator -> () {
             if (!has_value) {
                 throw std::runtime_error("attempting to obtain the value of nothing");
             }
-            return value;
+            return &value;
         }
     };
 
     template <typename T>
-    struct Set {
-        std::set<T> set;
+    struct Set :
+        public StringAdapter::Comparable<Set<T>>,
+        public StringAdapter::Hashable<Set<T>>
+    {
+        using THIS = Set<T>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
 
-        Set() {}
-        Set(const std::set<T> & set) : set(set) {}
+        Set() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3_iterator(a, b, &THIS::cbegin, &THIS::cend); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3_iterator<Set<T>, T>(a); })
+        {}
 
-        Set<T> & append_in_place(const T & item) {
-            set.push(item);
+        using SET_T = std::set<T>;
+
+        SET_T set;
+
+        void to_string() const {
+            std::cout << *this;
+        }
+        
+        void to_string() {
+            std::cout << *this;
+        }
+
+        typename SET_T::iterator begin() {
+            return set.begin();
+        }
+
+        typename SET_T::iterator end() {
+            return set.end();
+        }
+
+        typename SET_T::const_iterator cbegin() const {
+            return set.cbegin();
+        }
+
+        typename SET_T::const_iterator cend() const {
+            return set.cend();
+        }
+
+        typename SET_T::const_iterator begin() const {
+            return cbegin();
+        }
+
+        typename SET_T::const_iterator end() const {
+            return cend();
+        }
+
+        typename SET_T::reverse_iterator rbegin() {
+            return set.rbegin();
+        }
+
+        typename SET_T::reverse_iterator rend() {
+            return set.rend();
+        }
+
+        typename SET_T::const_reverse_iterator crbegin() const {
+            return set.crbegin();
+        }
+
+        typename SET_T::const_reverse_iterator crend() const {
+            return set.crend();
+        }
+
+        typename SET_T::const_reverse_iterator rbegin() const {
+            return crbegin();
+        }
+
+        typename SET_T::const_reverse_iterator rend() const {
+            return crend();
+        }
+
+        const std::size_t size() const {
+            return set.size();
+        }
+
+        Set<T> & insert_in_place(const T & item) {
+            set.insert(item);
             return *this;
         }
 
-        Set<T> append(const T & item) {
+        const Set<T> insert(const T & item) const {
             Set<T> copy = *this;
-            copy.append_in_place(item);
+            copy.insert_in_place(item);
             return copy;
         }
 
@@ -485,47 +1224,120 @@ namespace DarcsPatch {
             }
             return false;
         }
+
+        const Set<T> Union(const Set<T> & other) const {
+            Set<T> s;
+            std::set_union(set.cbegin(), set.cend(), other.set.cbegin(), other.set.cend(), std::inserter(s.set, s.cend()));
+            return s;
+        }
     };
 
     template <typename K, typename V>
-    struct Map {
-        std::map<K, V> map;
+    struct Map :
+        public StringAdapter::Comparable<Map<K, V>>,
+        public StringAdapter::Hashable<Map<K, V>>
+    {
+        using THIS = Map<K, V>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
 
-        Map() {}
-        Map(const std::map<K, V> & map) {
-            this->map = map;
+        Map() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3_iterator(a, b, &THIS::cbegin, &THIS::cend); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3_iterator<Map<K, V>, Tuple2<const K, V>>(a); })
+        {}
+
+        // we cannot use std::map due to it requiring comparison operators
+        // we cannot use std::unordered_map due to it requiring K to be hashable
+        //
+        // we must instead use std::vector
+        //
+
+        // using MAP_T = std::vector<std::pair<K, V>>;
+        using MAP_T = std::map<K, V>;
+
+        MAP_T map;
+
+        void to_string() const {
+            std::cout << *this;
+        }
+        
+        void to_string() {
+            std::cout << *this;
+        }
+
+        typename MAP_T::iterator begin() {
+            return map.begin();
+        }
+
+        typename MAP_T::iterator end() {
+            return map.end();
+        }
+
+        typename MAP_T::const_iterator cbegin() const {
+            return map.cbegin();
+        }
+
+        typename MAP_T::const_iterator cend() const {
+            return map.cend();
+        }
+
+        typename MAP_T::const_iterator begin() const {
+            return cbegin();
+        }
+
+        typename MAP_T::const_iterator end() const {
+            return cend();
+        }
+
+        typename MAP_T::reverse_iterator rbegin() {
+            return map.rbegin();
+        }
+
+        typename MAP_T::reverse_iterator rend() {
+            return map.rend();
+        }
+
+        typename MAP_T::const_reverse_iterator crbegin() const {
+            return map.crbegin();
+        }
+
+        typename MAP_T::const_reverse_iterator crend() const {
+            return map.crend();
+        }
+
+        typename MAP_T::const_reverse_iterator rbegin() const {
+            return crbegin();
+        }
+
+        typename MAP_T::const_reverse_iterator rend() const {
+            return crend();
+        }
+
+        const std::size_t size() const {
+            return map.size();
         }
 
         Map<K, V> & insert_in_place(const K & key, const V & value) {
-            map.insert(key, value);
+            map.insert({key, value});
             return *this;
         }
 
-        Map<K, V> insert(const K & key, const V & value) {
+        const Map<K, V> insert(const K & key, const V & value) const {
             Map<K, V> copy = *this;
-            copy.insert(key, value);
+            copy.insert_in_place(key, value);
             return copy;
         }
 
         const bool contains(const K & key) const {
-            return map.find(key) != map.end();
+            return map.contains(key);
         }
 
         const Maybe<V> lookup(const K & key) const {
-            auto s = map.find(key);
-            return s != map.end() ? s.second : Nothing();
+            if (auto search = map.find(key); search != map.end()) {
+                return search->second;
+            }
+            return Nothing();
         }
-    };
-
-
-    template <
-        typename char_t,
-        typename adapter_t,
-        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
-    >
-    struct H {
-        const adapter_t h;
-        H(const adapter_t & h) : h(h) {};
     };
 
     enum V2_PRIM {
@@ -533,30 +1345,90 @@ namespace DarcsPatch {
     };
 
     enum PATCH_TYPE {
-        ADD_FILE, REMOVE_FILE, HUNK
+        ADD_FILE, REMOVE_FILE, HUNK, TOK_REPLACE
     };
 
-    // this MUST NOT be a template
     struct Patch {
         // must always return an allocated patch
-        virtual const Patch* invert() const = 0;
+        virtual std::shared_ptr<Patch> invert() const = 0;
 
         virtual const PATCH_TYPE type() const = 0;
         const V2_PRIM v2_prim = NORMAL;
-        virtual ~Patch() {}
+        virtual ::std::ostream & to_stream(::std::ostream & os) const;
+        virtual ~Patch();
+        
+        void to_string() const;
+        
+        void to_string();
+
+        virtual int cmp(const Patch & other) const;
+        virtual std::size_t hashCode() const noexcept;
+        bool operator == (const DarcsPatch::Patch & other) const;
+        bool operator != (const DarcsPatch::Patch & other) const;
+        bool operator < (const DarcsPatch::Patch & other) const;
+        bool operator > (const DarcsPatch::Patch & other) const;
+        bool operator <= (const DarcsPatch::Patch & other) const;
+        bool operator >= (const DarcsPatch::Patch & other) const;
     };
 
 
     struct AddFile : Patch {
-        AddFile();
         const PATCH_TYPE type() const override;
-        const Patch* invert() const override;
+        std::shared_ptr<Patch> invert() const override;
+        ::std::ostream & to_stream(::std::ostream & os) const override;
+        using Patch::cmp;
+        using Patch::hashCode;
     };
 
     struct RemoveFile : Patch {
-        RemoveFile();
         const PATCH_TYPE type() const override;
-        const Patch* invert() const override;
+        std::shared_ptr<Patch> invert() const override;
+        ::std::ostream & to_stream(::std::ostream & os) const override;
+        using Patch::cmp;
+        using Patch::hashCode;
+    };
+
+    template <
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
+    struct TokReplace : Patch {
+        adapter_t t;
+        adapter_t o;
+        adapter_t n;
+
+        TokReplace() = default;
+        TokReplace(const adapter_t & t, const adapter_t & o, const adapter_t & n) : t(t), o(o), n(n) {}
+
+        const PATCH_TYPE type() const override {
+            return TOK_REPLACE;
+        }
+
+        std::shared_ptr<Patch> invert() const override {
+            return std::static_pointer_cast<Patch>(std::make_shared<TokReplace>(t, n, o));
+        }
+
+        ::std::ostream & to_stream(::std::ostream & os) const override {
+            return os << "{ TokReplace, t = " << t << ", o = " << o << ", n = " << n << " }";
+        }
+
+        int cmp(const Patch & other) const override {
+            int r = StringAdapter::compare_2(type(), other.type());
+            if (r == 0) {
+                return StringAdapter::compare_3(*this, reinterpret_cast<const TokReplace<char_t, adapter_t> &>(other), &TokReplace<char_t, adapter_t>::t, &TokReplace<char_t, adapter_t>::o, &TokReplace<char_t, adapter_t>::n);
+            } 
+            return r;
+        }
+
+        std::size_t hashCode() const noexcept {
+            // https://docs.oracle.com/javase/8/docs/api/java/util/List.html#hashCode--
+            std::size_t hashCode_ = 1;
+            hashCode_ = 31 * hashCode_ + std::hash<adapter_t>()(t);
+            hashCode_ = 31 * hashCode_ + std::hash<adapter_t>()(o);
+            hashCode_ = 31 * hashCode_ + std::hash<adapter_t>()(n);
+            return hashCode_;
+        }
     };
 
     template <
@@ -565,19 +1437,61 @@ namespace DarcsPatch {
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
     struct FileHunk : Patch {
-        const size_t line;
-        const FL<adapter_t> old_lines;
-        const FL<adapter_t> new_lines;
+        std::size_t line;
+        RL<adapter_t> old_lines;
+        RL<adapter_t> new_lines;
         FileHunk() : line(0), old_lines(NilFL), new_lines(NilFL) {}
-        FileHunk(const size_t & line, const FL<adapter_t>& old_lines, const FL<adapter_t>& new_lines) : line(line), old_lines(old_lines), new_lines(new_lines) {}
-        FileHunk(const size_t & line, const adapter_t& old_line, const adapter_t& new_line) : line(line), old_lines(ToFL(old_line.lines())), new_lines(ToFL(new_line.lines())) {}
+        FileHunk(const std::size_t & line,const RL<adapter_t>& old_lines, const RL<adapter_t>& new_lines) : line(line), old_lines(old_lines), new_lines(new_lines) {}
+        FileHunk(const std::size_t & line,const adapter_t& old_line, const adapter_t& new_line) : line(line) {
+
+            // need to cast from
+            //       std::shared_ptr<BasicStringAdapter<T>>
+            //   to
+            //       std::shared_ptr<adapter_t>
+            //
+            // we know lines allocates an instance of adapter_t or higher derived object
+            //
+            auto ol = old_line.lines();
+            auto nl = new_line.lines();
+            for (auto & o : ol) {
+                old_lines = old_lines.push(*static_cast<adapter_t*>(o.get()));
+            }
+            for (auto & n : nl) {
+                new_lines = new_lines.push(*static_cast<adapter_t*>(n.get()));
+            }
+        }
 
         const PATCH_TYPE type() const override {
             return HUNK;
         }
 
-        const Patch* invert() const override {
-            return new FileHunk(line, new_lines, old_lines);
+        std::shared_ptr<Patch> invert() const override {
+            return std::static_pointer_cast<Patch>(std::make_shared<FileHunk<char_t, adapter_t>>(line, new_lines, old_lines));
+        }
+
+        ::std::ostream & to_stream(::std::ostream & os) const override {
+            return os << "{ FileHunk, line = " << line << ", old_lines = " << old_lines << ", new_lines = " << new_lines << " }";
+        }
+
+        int cmp(const Patch & other) const override {
+            int r = StringAdapter::compare_2(type(), other.type());
+            if (r == 0) {
+                return StringAdapter::compare_3(*this, reinterpret_cast<const FileHunk<char_t, adapter_t> &>(other),
+                    &FileHunk<char_t, adapter_t>::line,
+                    &FileHunk<char_t, adapter_t>::old_lines,
+                    &FileHunk<char_t, adapter_t>::new_lines
+                );
+            } 
+            return r;
+        }
+
+        std::size_t hashCode() const noexcept {
+            // https://docs.oracle.com/javase/8/docs/api/java/util/List.html#hashCode--
+            std::size_t hashCode_ = 1;
+            hashCode_ = 31 * hashCode_ + std::hash<std::size_t>()(line);
+            hashCode_ = 31 * hashCode_ + std::hash<RL<adapter_t>>()(old_lines);
+            hashCode_ = 31 * hashCode_ + std::hash<RL<adapter_t>>()(new_lines);
+            return hashCode_;
         }
     };
 
@@ -588,22 +1502,61 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    struct PatchInfo {
-        const adapter_t date;
-        const adapter_t name;
-        const adapter_t author;
-        const FL<adapter_t> log;
-        bool legacyIsInverted = false;
-        PatchInfo() : date(adapter_t()), name(adapter_t()), author(adapter_t()), log(NilFL) {}
-        PatchInfo(const adapter_t & name) : date(adapter_t()), name(name), author(adapter_t()), log(NilFL) {}
-        PatchInfo(const adapter_t & date, const adapter_t & name, const adapter_t & author, const FL<adapter_t> & log) : date(date), name(name), author(author), log(log) {}
+    struct PatchInfo :
+        public StringAdapter::Comparable<PatchInfo<char_t, adapter_t>>,
+        public StringAdapter::Hashable<PatchInfo<char_t, adapter_t>>
+    {
+        using THIS = PatchInfo<char_t, adapter_t>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
 
-        const bool operator == (const PatchInfo<char_t, adapter_t> & other) const {
-            return date == other.date && name == other.name && author == other.author && log == other.log;
+        PatchInfo() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); })
+        {}
+
+        adapter_t date;
+        adapter_t name;
+        adapter_t author;
+        RL<adapter_t> log;
+        bool legacyIsInverted = false;
+
+        PatchInfo(const adapter_t & name) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); }),
+            name(name)
+        {
+        }
+
+        PatchInfo(const adapter_t & date, const adapter_t & name, const adapter_t & author, const RL<adapter_t> & log) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); }),
+            date(date),
+            name(name),
+            author(author),
+            log(log)
+        {
+        }
+
+        void to_string() const {
+            std::cout << *this;
+        }
+        
+        void to_string() {
+            std::cout << *this;
         }
     };
 
     using PatchInfo_T = PatchInfo<char, StringAdapter::CharAdapter>;
+
+    PatchInfo_T makePatchInfo_T(const StringAdapter::CharAdapter & patch_id_unique_label);
+    
+    template <
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
+    using PatchInfoAndG = PatchInfo<char_t, adapter_t>;
 
     template <
         typename char_t,
@@ -611,9 +1564,48 @@ namespace DarcsPatch {
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
     struct AnchorPath {
-        const std::vector<adapter_t> names;
+        Set<adapter_t> names;
         AnchorPath() : names({}) {}
-        AnchorPath(const std::vector<adapter_t> & names) : names(names) {}
+        AnchorPath(const Set<adapter_t> & names) : names(names) {}
+
+        void to_string() const {
+            std::cout << *this;
+        }
+        
+        void to_string() {
+            std::cout << *this;
+        }
+
+        bool operator == (const AnchorPath<char_t, adapter_t> & other) const {
+            return names == other.names;
+        }
+
+        bool operator != (const AnchorPath<char_t, adapter_t> & other) const {
+            return names != other.names;
+        }
+
+        bool operator < (const AnchorPath<char_t, adapter_t> & other) const {
+            return names < other.names;
+        }
+
+        bool operator > (const AnchorPath<char_t, adapter_t> & other) const {
+            return names > other.names;
+        }
+
+        bool operator <= (const AnchorPath<char_t, adapter_t> & other) const {
+            return names <= other.names;
+        }
+
+        bool operator >= (const AnchorPath<char_t, adapter_t> & other) const {
+            return names >= other.names;
+        }
+
+        std::size_t hashCode() const noexcept {
+            // https://docs.oracle.com/javase/8/docs/api/java/util/List.html#hashCode--
+            std::size_t hashCode_ = 1;
+            hashCode_ = 31 * hashCode_ + std::hash<Set<adapter_t>>()(names);
+            return hashCode_;
+        }
     };
 
     using AnchorPath_T = AnchorPath<char, StringAdapter::CharAdapter>;
@@ -623,11 +1615,37 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    struct Core_FP {
-        const AnchorPath<char_t, adapter_t> anchor_path;
-        const Patch* patch;
-        Core_FP() : anchor_path(AnchorPath<char_t, adapter_t>()), patch(nullptr) {}
-        Core_FP(const Patch* p) : anchor_path(AnchorPath<char_t, adapter_t>()), patch(p) {}
+    struct Core_FP :
+        public StringAdapter::Comparable<Core_FP<char_t, adapter_t>>,
+        public StringAdapter::Hashable<Core_FP<char_t, adapter_t>>
+    {
+        using THIS = Core_FP<char_t, adapter_t>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
+
+        Core_FP() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::anchor_path, &THIS::patch); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::anchor_path, &THIS::patch); })
+        {}
+
+        AnchorPath<char_t, adapter_t> anchor_path;
+        std::shared_ptr<Patch> patch;
+
+        Core_FP(std::shared_ptr<Patch> p) : Core_FP() {
+            patch = p;
+        }
+        Core_FP(const AnchorPath<char_t, adapter_t> & anchor_path, std::shared_ptr<Patch> p) : Core_FP() {
+            this->anchor_path = anchor_path;
+            patch = p;
+        }
+
+        void to_string() const {
+            std::cout << *this;
+        }
+        
+        void to_string() {
+            std::cout << *this;
+        }
     };
 
     using Core_FP_T = Core_FP<char, StringAdapter::CharAdapter>;
@@ -638,52 +1656,118 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    struct Named {
+    struct Named :
+        public StringAdapter::Comparable<Named<T, char_t, adapter_t>>,
+        public StringAdapter::Hashable<Named<T, char_t, adapter_t>>
+    {
+        using THIS = Named<T, char_t, adapter_t>;
+        COMPARABLE_USING_BASE(StringAdapter::Comparable<THIS>);
+        HASHABLE_USING_BASE(StringAdapter::Hashable<THIS>);
+
+        Named() :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::n, &THIS::d, &THIS::p); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::n, &THIS::d, &THIS::p); })
+        {}
+
         PatchInfo<char_t, adapter_t> n;
-        const FL<PatchInfo<char_t, adapter_t>> d;
-        const FL<T> p;
-        Named() : n(PatchInfo<char_t, adapter_t>()), d(NilFL), p(NilFL) {}
-        Named(const PatchInfo<char_t, adapter_t> & n, const FL<PatchInfo<char_t, adapter_t>> & d, const FL<T> & p) : n(n), d(d), p(p) {}
+        Set<PatchInfo<char_t, adapter_t>> d;
+        FL<T> p;
+        
+        Named(const PatchInfo<char_t, adapter_t> & n, const Set<PatchInfo<char_t, adapter_t>> & d, const FL<T> & p) : Named() {
+            this->n = n;
+            this->d = d;
+            this->p = p;
+        }
 
         PatchInfo<char_t, adapter_t> ident() {
             return n;
+        }
+
+        void to_string() const {
+            std::cout << *this;
+        }
+
+        void to_string() {
+            std::cout << *this;
+        }
+
+        bool operator == (const Named<T, char_t, adapter_t> & other) const {
+            return n == other.n && d == other.d && p == other.p;
+        }
+
+        bool operator != (const Named<T, char_t, adapter_t> & other) const {
+            return !(*this == other);
+        }
+
+        bool operator < (const Named<T, char_t, adapter_t> & other) const {
+            return n < other.n && d < other.d && p < other.p;
+        }
+
+        bool operator > (const Named<T, char_t, adapter_t> & other) const {
+            return n > other.n && d > other.d && p > other.p;
+        }
+
+        bool operator <= (const Named<T, char_t, adapter_t> & other) const {
+            return n <= other.n && d <= other.d && p <= other.p;
+        }
+
+        bool operator >= (const Named<T, char_t, adapter_t> & other) const {
+            return n >= other.n && d >= other.d && p >= other.p;
+        }
+
+        std::size_t hashCode() const noexcept {
+            // https://docs.oracle.com/javase/8/docs/api/java/util/List.html#hashCode--
+            std::size_t hashCode_ = 1;
+            hashCode_ = 31 * hashCode_ + std::hash<PatchInfo<char_t, adapter_t>>()(n);
+            hashCode_ = 31 * hashCode_ + std::hash<Set<PatchInfo<char_t, adapter_t>>>()(d);
+            hashCode_ = 31 * hashCode_ + std::hash<FL<T>>()(p);
+            return hashCode_;
         }
     };
 
     template <typename T>
     using Named_T = Named<T, char, StringAdapter::CharAdapter>;
 
-    template <
-        typename T,
-        typename char_t,
-        typename adapter_t
-    >
-    struct Named<T*, char_t, adapter_t, typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type> {
-        PatchInfo<char_t, adapter_t>* n;
-        const FL<PatchInfo<char_t, adapter_t>> d;
-        const FL<T*> p;
-        Named() : n(nullptr), d(NilFL), p(NilFL) {}
-        Named(const PatchInfo<char_t, adapter_t> * n, const FL<PatchInfo<char_t, adapter_t>> & d, const FL<T*> & p) : n(n), d(d), p(p) {}
-    };
+    std::shared_ptr<Patch> makeAddFile();
+    std::shared_ptr<Patch> makeRemoveFile();
 
     template <
         typename char_t,
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    FileHunk<char_t, adapter_t>* makeHunk(const size_t & line, const adapter_t& old_line, const adapter_t& new_line) {
-        return new FileHunk<char_t, adapter_t>(line, old_line, new_line);
+    std::shared_ptr<Patch> makeTokReplace(const adapter_t & t, const adapter_t & o, const adapter_t & n) {
+        return std::static_pointer_cast<Patch>(std::make_shared<TokReplace<char_t, adapter_t>>(t, o, n));
     }
 
-    FileHunk_T* makeHunk_T(const size_t & line, const StringAdapter::CharAdapter& old_line, const StringAdapter::CharAdapter& new_line);
+    template <
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
+    std::shared_ptr<Patch> makeHunk(const std::size_t & line, const adapter_t& old_line, const adapter_t& new_line) {
+        return std::static_pointer_cast<Patch>(std::make_shared<FileHunk<char_t, adapter_t>>(line, old_line, new_line));
+    }
+
+    template <
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
+    std::shared_ptr<Patch> makeHunk(const std::size_t & line,const RL<adapter_t>& old_lines, const RL<adapter_t>& new_lines) {
+        return std::static_pointer_cast<Patch>(std::make_shared<FileHunk<char_t, adapter_t>>(line, old_lines, new_lines));
+    }
+
+    std::shared_ptr<Patch> makeHunk_T(const std::size_t & line,const RL<StringAdapter::CharAdapter>& old_lines, const RL<StringAdapter::CharAdapter>& new_lines);
+    std::shared_ptr<Patch> makeHunk_T(const std::size_t & line, const StringAdapter::CharAdapter& old_line, const StringAdapter::CharAdapter& new_line);
     
     template <
         typename char_t,
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    Named<Core_FP<char_t, adapter_t>, char_t, adapter_t> makeNamedWithType(Patch* patch_type) {
-        return Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>(PatchInfo<char_t, adapter_t>(), NilFL, ToFL(Core_FP<char_t, adapter_t>(patch_type)));
+    Named<Core_FP<char_t, adapter_t>, char_t, adapter_t> makeNamedWithType(std::shared_ptr<Patch> patch_type) {
+        return Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>(PatchInfo<char_t, adapter_t>(), {}, ToFL(Core_FP<char_t, adapter_t>(patch_type)));
     }
 
     template <
@@ -691,22 +1775,13 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    Named<Core_FP<char_t, adapter_t>, char_t, adapter_t> makeNamedHunk(const adapter_t & patch_id_unique_label, const size_t & line, const adapter_t& old_line, const adapter_t& new_line) {
-        return makeNamedWithType<Core_FP<char_t, adapter_t>, char_t, adapter_t>(patch_id_unique_label, makeHunk(line, old_line, new_line));
+    Named<Core_FP<char_t, adapter_t>, char_t, adapter_t> makeNamedHunk(const adapter_t & patch_id_unique_label, const std::size_t & line, const adapter_t& old_line, const adapter_t& new_line) {
+        return makeNamedWithType<char_t, adapter_t>(patch_id_unique_label, makeHunk(line, old_line, new_line));
     }
 
-    Named_T<Core_FP_T> makeNamedWithType_T(const StringAdapter::CharAdapter & patch_id_unique_label, Patch* patch_type);
+    Named_T<Core_FP_T> makeNamedWithType_T(const StringAdapter::CharAdapter & patch_id_unique_label, std::shared_ptr<Patch> patch_type);
 
-    Named_T<Core_FP_T> makeNamedHunk_T(const StringAdapter::CharAdapter & patch_id_unique_label, const size_t & line, const StringAdapter::CharAdapter & old_line, const StringAdapter::CharAdapter & new_line);
-
-    template <
-        typename char_t,
-        typename adapter_t,
-        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
-    >
-    using Deps__ = Tuple2<Set<Named<Patch*, char_t, adapter_t>>, Set<Named<Patch*, char_t, adapter_t>>>;
-
-    using Deps___T = Deps__<char, StringAdapter::CharAdapter>;
+    Named_T<Core_FP_T> makeNamedHunk_T(const StringAdapter::CharAdapter & patch_id_unique_label, const std::size_t & line, const StringAdapter::CharAdapter & old_line, const StringAdapter::CharAdapter & new_line);
 
     template <
         typename char_t,
@@ -747,6 +1822,14 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
+    using PatchId = PatchInfo<T, char_t, adapter_t>;
+
+    template <
+        typename T,
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
     static const PatchInfo<char_t, adapter_t> ident(const Named<T, char_t, adapter_t> & p) {
         return patch2patchinfo(p);
     }
@@ -765,16 +1848,16 @@ namespace DarcsPatch {
     template <typename T>
     static const Tuple2<T, T> invert(const Tuple2<T, T> & p);
 
-    template <typename T>
-    static const T invert(const T & ptr);
-
-    template <typename T>
-    static const T* invert(const T* ptr);
-    
-    template <>
-    const Patch* invert<Patch>(const Patch* p) {
-        return p->invert();
+    template <
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
+    static const Core_FP<char_t, adapter_t> invert(const Core_FP<char_t, adapter_t> & p) {
+        return Core_FP<char_t, adapter_t>(p.anchor_path, invert(p.patch));
     }
+
+    std::shared_ptr<Patch> invert(std::shared_ptr<Patch> p);
 
     // invertFL :: Invert p => FL p wX wY -> RL p wY wX
     template <typename T>
@@ -787,7 +1870,7 @@ namespace DarcsPatch {
         T x;
         FL<T> xs;
         fl.extract(x, xs);
-        return invert<T>(xs).append(invert<T>(x));
+        return invert<T>(xs).push(invert<T>(x));
     }
 
     // invertRL :: Invert p => RL p wX wY -> FL p wY wX
@@ -801,7 +1884,7 @@ namespace DarcsPatch {
         T x;
         RL<T> xs;
         rl.extract(x, xs);
-        return invert<T>(xs).append(invert<T>(x));
+        return invert<T>(xs).push(invert<T>(x));
     }
 
     // instance Invert p => Invert (FL p) where
@@ -824,5 +1907,524 @@ namespace DarcsPatch {
         // invert (a :> b) = invert b :> invert a
         return Tuple2<T, T>(invert(p.v1), invert(p.v2));
     }
-    
+
+    template<typename Result,typename ...Args>
+    struct abstract_function
+    {
+        virtual Result operator()(Args... args)=0;
+        virtual abstract_function *clone() const =0;
+        virtual ~abstract_function() = default;
+    };
+
+    template<typename Func,typename Result,typename ...Args>
+    class concrete_function: public abstract_function<Result,Args...>
+    {
+        Func f;
+    public:
+        concrete_function(const Func &x)
+            : f(x)
+        {}
+        Result operator()(Args... args) override
+        {
+            return f(args...);
+        }
+        concrete_function *clone() const override
+        {
+            return new concrete_function{f};
+        }
+    };
+
+    template<typename Func>
+    struct func_filter
+    {
+        typedef Func type;
+    };
+    template<typename Result,typename ...Args>
+    struct func_filter<Result(Args...)>
+    {
+        typedef Result (*type)(Args...);
+    };
+
+    template<typename signature>
+    class function;
+
+    template<typename Result,typename ...Args>
+    class function<Result(Args...)>
+    {
+        abstract_function<Result,Args...> *f;
+    public:
+        function()
+            : f(nullptr)
+        {}
+        template<typename Func> function(const Func &x)
+            : f(new concrete_function<typename func_filter<Func>::type,Result,Args...>(x))
+        {}
+        function(const function &rhs)
+            : f(rhs.f ? rhs.f->clone() : nullptr)
+        {}
+        function &operator=(const function &rhs)
+        {
+            if( (&rhs != this ) && (rhs.f) )
+            {
+                auto *temp = rhs.f->clone();
+                delete f;
+                f = temp;
+            }
+            return *this;
+        }
+        template<typename Func> function &operator=(const Func &x)
+        {
+            auto *temp = new concrete_function<typename func_filter<Func>::type,Result,Args...>(x);
+            delete f;
+            f = temp;
+            return *this;
+        }
+        Result operator()(Args... args) const
+        {
+            if(f)
+                return (*f)(args...);
+            else
+                return Result{};
+        }
+        ~function()
+        {
+            delete f;
+        }
+    };
+
+    template <typename R>
+    struct LazyValue {
+        std::shared_ptr<function<R()>> func;
+        mutable std::shared_ptr<R> value;
+        mutable std::shared_ptr<bool> called;
+
+        LazyValue(const function<R()> & f) : func(std::make_shared<function<R()>>(f)), called(std::make_shared<bool>(false)) {}
+
+        LazyValue(const LazyValue<R> & f) {
+            func = f.func;
+            value = f.value;
+            called = f.called;
+        }
+        LazyValue(const LazyValue<R> && f) {
+            func = f.func;
+            value = f.value;
+            called = f.called;
+        }
+        LazyValue<R>&operator=(const LazyValue<R> & f) {
+            func = f.func;
+            value = f.value;
+            called = f.called;
+            return *this;
+        }
+        LazyValue<R>&operator=(const LazyValue<R> && f) {
+            func = f.func;
+            value = f.value;
+            called = f.called;
+            return *this;
+        }
+        R & operator ()() const {
+            if (*called.get()) {
+                return *value.get();
+            } else {
+                value = std::make_shared<R>((*func.get())());
+                called = std::make_shared<bool>(true);
+                return *value.get();
+            }
+        }
+    };
+
+    template <
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
+    void renderDepsGraphAsDot(const DepsGraph<char_t, adapter_t> & g) {
+        std::cout << "digraph {";
+        auto indent = "   ";
+        std::cout << "\n" << indent << "graph [rankdir=LR];";
+        std::cout << "\n" << indent << "node [imagescale=true];";
+
+        auto showID = [] (auto & key) {
+            SHA1 sha1;
+            auto & n = key.name.c_str();
+            return sha1(n.ptr(), n.lengthInBytes());
+        };
+
+        auto showNode = [&](auto & key) {
+            std::cout << "\n" << indent << "\"" << showID(key) << "\" [label=" << key.name << "]";
+        };
+
+        auto showEdges = [&](auto & key, auto & value) {
+            auto begin = value.begin();
+            if (begin != value.end()) {
+                std::cout << "\n" << indent << "\"" << showID(key) << "\" -> " << "{\"" << showID(*begin) << "\"}";
+            }
+        };
+
+        for(auto & pair : g) {
+            showNode(pair.first);
+        }
+
+        for(auto & pair : g) {
+            showEdges(pair.first, pair.second.v1);
+        }
+
+        std::cout << "\n}\n";
+    }
 }
+
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::NilFL_T & item);
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::NilRL_T & item);
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Patch & item);
+
+template <typename T1, typename T2>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple2<T1, T2> & item) {
+    os << "{ Tuple2, v1 = " << item.v1 << ", v2 = " << item.v2 << " }";
+    return os;
+}
+
+template <typename T1, typename T2>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple2<T1*, T2> & item) {
+    os << "{ Tuple2, v1 = " << *item.v1 << ", v2 = " << item.v2 << " }";
+    return os;
+}
+
+template <typename T1, typename T2>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple2<T1, T2*> & item) {
+    os << "{ Tuple2, v1 = " << item.v1 << ", v2 = " << *item.v2 << " }";
+    return os;
+}
+
+template <typename T1, typename T2>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple2<T1*, T2*> & item) {
+    os << "{ Tuple2, v1 = " << *item.v1 << ", v2 = " << *item.v2 << " }";
+    return os;
+}
+
+template <typename T1, typename T2, typename T3>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple3<T1, T2, T3> & item) {
+    os << "{ Tuple3, v1 = " << item.v1 << ", v2 = " << item.v2 << ", v3 = " << item.v3 << " }";
+    return os;
+}
+
+template <typename T1, typename T2, typename T3>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple3<T1*, T2, T3> & item) {
+    os << "{ Tuple3, v1 = " << *item.v1 << ", v2 = " << item.v2 << ", v3 = " << item.v3 << " }";
+    return os;
+}
+
+template <typename T1, typename T2, typename T3>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple3<T1, T2*, T3> & item) {
+    os << "{ Tuple3, v1 = " << item.v1 << ", v2 = " << *item.v2 << ", v3 = " << item.v3 << " }";
+    return os;
+}
+
+template <typename T1, typename T2, typename T3>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple3<T1, T2, T3*> & item) {
+    os << "{ Tuple3, v1 = " << item.v1 << ", v2 = " << item.v2 << ", v3 = " << *item.v3 << " }";
+    return os;
+}
+
+template <typename T1, typename T2, typename T3>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple3<T1*, T2*, T3> & item) {
+    os << "{ Tuple3, v1 = " << *item.v1 << ", v2 = " << *item.v2 << ", v3 = " << item.v3 << " }";
+    return os;
+}
+
+template <typename T1, typename T2, typename T3>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple3<T1*, T2, T3*> & item) {
+    os << "{ Tuple3, v1 = " << *item.v1 << ", v2 = " << item.v2 << ", v3 = " << *item.v3 << " }";
+    return os;
+}
+
+template <typename T1, typename T2, typename T3>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple3<T1, T2*, T3*> & item) {
+    os << "{ Tuple3, v1 = " << item.v1 << ", v2 = " << *item.v2 << ", v3 = " << *item.v3 << " }";
+    return os;
+}
+
+template <typename T1, typename T2, typename T3>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Tuple3<T1*, T2*, T3*> & item) {
+    os << "{ Tuple3, v1 = " << *item.v1 << ", v2 = " << *item.v2 << ", v3 = " << *item.v3 << " }";
+    return os;
+}
+
+template <typename T>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::FL<T> & item) {
+    auto b = item.begin();
+    auto e = item.end();
+    if (b == e) {
+        return os << "[]";
+    }
+    os << "[ ";
+    for (; b != e; ++b) {
+        os << *b;
+        if (b+1 != e) {
+            os << ", ";
+        } else {
+            os << " ";
+        }
+    }
+    os << "]";
+    return os;
+}
+
+template <typename T>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::FL<T*> & item) {
+    auto b = item.begin();
+    auto e = item.end();
+    if (b == e) {
+        return os << "[]";
+    }
+    os << "[ ";
+    for (; b != e; ++b) {
+        os << **b;
+        if (b+1 != e) {
+            os << ", ";
+        } else {
+            os << " ";
+        }
+    }
+    os << "]";
+    return os;
+}
+
+template <typename T>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::RL<T> & item) {
+    auto b = item.begin();
+    auto e = item.end();
+    if (b == e) {
+        return os << "[]";
+    }
+    os << "[ ";
+    for (; b != e; ++b) {
+        os << *b;
+        if (b+1 != e) {
+            os << ", ";
+        } else {
+            os << " ";
+        }
+    }
+    os << "]";
+    return os;
+}
+
+template <typename T>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::RL<T*> & item) {
+    auto b = item.begin();
+    auto e = item.end();
+    if (b == e) {
+        return os << "[]";
+    }
+    os << "[ ";
+    for (; b != e; ++b) {
+        os << **b;
+        if (b+1 != e) {
+            os << ", ";
+        } else {
+            os << " ";
+        }
+    }
+    os << "]";
+    return os;
+}
+
+template <typename T>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Maybe<T> & item) {
+    os << "{ Maybe, has_value = " << (item.has_value ? "true" : "false");
+    if (item.has_value) {
+        os << ", value = " << item.value;
+    }
+    os << " }";
+    return os;
+}
+
+template <typename T>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Maybe<T*> & item) {
+    os << "{ Maybe, has_value = " << (item.has_value ? "true" : "false");
+    if (item.has_value) {
+        os << ", value = " << *item.value;
+    }
+    os << " }";
+    return os;
+}
+
+template <typename T>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Set<T> & item) {
+    auto b = item.begin();
+    auto e = item.end();
+    if (b == e) {
+        return os << "[]";
+    }
+    os << "[ ";
+    for (; b != e; ++b) {
+        os << *b;
+        b++;
+        if (b != e) {
+            os << ", ";
+        } else {
+            os << " ";
+        }
+        b--;
+    }
+    os << "]";
+    return os;
+}
+
+template <typename T>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Set<T*> & item) {
+    auto b = item.begin();
+    auto e = item.end();
+    if (b == e) {
+        return os << "[]";
+    }
+    os << "[ ";
+    for (; b != e; ++b) {
+        os << **b;
+        b++;
+        if (b != e) {
+            os << ", ";
+        } else {
+            os << " ";
+        }
+        b--;
+    }
+    os << "]";
+    return os;
+}
+
+template <typename K, typename V>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Map<K, V> & item) {
+    auto b = item.begin();
+    auto e = item.end();
+    if (b == e) {
+        return os << "{ Map, [] }";
+    }
+    os << "{ Map, [ ";
+    for (; b != e; ++b) {
+        os << "{ key = " << b->first << ", value = " << b->second << " }";
+        b++;
+        if (b != e) {
+            os << ", ";
+        } else {
+            os << " ";
+        }
+        b--;
+    }
+    os << "] }";
+    return os;
+}
+
+template <typename K, typename V>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Map<K*, V> & item) {
+    auto b = item.begin();
+    auto e = item.end();
+    if (b == e) {
+        return os << "{ Map, [] }";
+    }
+    os << "{ Map, [ ";
+    for (; b != e; ++b) {
+        os << "{ key = " << *b->first << ", value = " << b->second << " }";
+        if (b+1 != e) {
+            os << ", ";
+        } else {
+            os << " ";
+        }
+    }
+    os << "] }";
+    return os;
+}
+
+template <typename K, typename V>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Map<K, V*> & item) {
+    auto b = item.begin();
+    auto e = item.end();
+    if (b == e) {
+        return os << "{ Map, [] }";
+    }
+    os << "{ Map, [ ";
+    for (; b != e; ++b) {
+        os << "{ key = " << b->first << ", value = " << *b->second << " }";
+        if (b+1 != e) {
+            os << ", ";
+        } else {
+            os << " ";
+        }
+    }
+    os << "] }";
+    return os;
+}
+
+template <typename K, typename V>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Map<K*, V*> & item) {
+    auto b = item.begin();
+    auto e = item.end();
+    if (b == e) {
+        return os << "{ Map, [] }";
+    }
+    os << "{ Map, [ ";
+    for (; b != e; ++b) {
+        os << "{ key = " << *b->first << ", value = " << *b->second << " }";
+        if (b+1 != e) {
+            os << ", ";
+        } else {
+            os << " ";
+        }
+    }
+    os << "] }";
+    return os;
+}
+
+template <
+    typename char_t,
+    typename adapter_t,
+    typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::PatchInfo<char_t, adapter_t> & item) {
+    os << "{ PatchInfo, date = " << item.date << ", name = " << item.name << ", author = " << item.author << ", log = " << item.log << ", legacyIsInverted = " << (item.legacyIsInverted ? "true" : "false") << " }";
+    return os;
+}
+
+template <
+    typename char_t,
+    typename adapter_t,
+    typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::AnchorPath<char_t, adapter_t> & item) {
+    os << "{ AnchorPath, names = " << item.names << " }";
+    return os;
+}
+
+template <
+    typename char_t,
+    typename adapter_t,
+    typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Core_FP<char_t, adapter_t> & item) {
+    os << "{ Core_FP, anchor_path = " << item.anchor_path << ", patch = " << *item.patch << " }";
+    return os;
+}
+
+template <
+    typename T,
+    typename char_t,
+    typename adapter_t,
+    typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Named<T, char_t, adapter_t> & item) {
+    os << "{ Named, n = " << item.n << ", d = " << item.d << ", p = " << item.p << " }";
+    return os;
+}
+
+template <
+    typename T,
+    typename char_t,
+    typename adapter_t
+>
+::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Named<T*, char_t, adapter_t, typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type> & item) {
+    os << "{ Named, n = " << item.n << ", d = " << item.d << ", p = " << item.p << " }";
+    return os;
+}
+
+
+#endif

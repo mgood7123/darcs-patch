@@ -1,8 +1,9 @@
-#pragma once
+#ifndef DARCS_PATCH_H
+#define DARCS_PATCH_H
 
-#include "adapter.h"
+#include <string_adapter.h>
 #include "darcs_types.h"
-#include "darcs_commute.h"
+// #include "darcs_commute.h"
 
 namespace DarcsPatch {
     template <typename char_t, typename adapter_t, typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type>
@@ -84,14 +85,16 @@ namespace DarcsPatch {
         `j` is inserted to sets `direct` and computed `u`
         */
 
-        Maybe<Set<PatchId>> allDeps(const PatchId & j, const Map<PatchId, Dep> & m) {
+        template <typename T>
+        Maybe<Set<PatchId<T, char_t, adapter_t>>> allDeps(const PatchId<T, char_t, adapter_t> & j, const Map<PatchId<T, char_t, adapter_t>, Deps<char_t, adapter_t>> & m) {
             auto sets = m.lookup(j);
             return !sets.has_value ? sets : std::set_union(sets->v1.set, sets->v2.set);
         }
 
-        Maybe<Set<PatchId>> addDeps(const PatchId & j, const Set<PatchId> & indirect, const Map<PatchId, Dep> & m) {
+        template <typename T>
+        Maybe<Set<PatchId<T, char_t, adapter_t>>> addDeps(const PatchId<T, char_t, adapter_t> & j, const Set<PatchId<T, char_t, adapter_t>> & indirect, const Map<PatchId<T, char_t, adapter_t>, Deps<char_t, adapter_t>> & m) {
             auto v = allDeps(j, m);
-            return !v.has_value ? v : Set<PatchId>(std::set_union(v.value_ref().set, indirect.set)).append(j);
+            return !v.has_value ? v : Set<PatchId<T, char_t, adapter_t>>(std::set_union(v.value_ref().set, indirect.set)).append(j);
         }
 
         // depsGraph
@@ -119,17 +122,18 @@ namespace DarcsPatch {
                 -> FL (PatchInfoAndG a) wB wC1
                 -> FL (PatchInfoAndG a) wC1 wD1
         */
-        Dep foldDeps(const RL<PatchInfoAndG> & arg, const FL<PatchInfoAndG> & p_and_deps, const FL<PatchInfoAndG> & non_deps, Dep & acc, const Map<PatchId, Dep> & m) {
+        template <typename T>
+        Deps<char_t, adapter_t> foldDeps(const RL<PatchInfoAndG<char_t, adapter_t>> & arg, const FL<PatchInfoAndG<char_t, adapter_t>> & p_and_deps, const FL<PatchInfoAndG<char_t, adapter_t>> & non_deps, Deps<char_t, adapter_t> & acc, const Map<PatchId<T, char_t, adapter_t>, Deps<char_t, adapter_t>> & m) {
+            PatchInfoAndG<char_t, adapter_t> q;
+            RL<PatchInfoAndG<char_t, adapter_t>> qs;
+            arg.extract(q, qs);
             if (qs.isNil()) {
                 return acc;
             }
-            PatchInfoAndG q;
-            RL<PatchInfoAndG> qs;
-            arg.extract(q, qs);
-            PatchId j = q.n.p->ident();
+            PatchId<T, char_t, adapter_t> j = q.n.p->ident();
             
-            Set<PatchId> & direct = acc.v1;
-            Set<PatchId> & indirect = acc.v2;
+            Set<PatchId<T, char_t, adapter_t>> & direct = acc.v1;
+            Set<PatchId<T, char_t, adapter_t>> & indirect = acc.v2;
             
             /*
             -- If we already know we indirectly depend on q, then there is
@@ -163,7 +167,8 @@ namespace DarcsPatch {
             `q :> p_and_deps` makes a tuple of q and p_and_deps
             */
 
-            auto tmp2 = commuteFL({q, p_and_deps});
+            std::cout << "calling commuteFL with arguments q = " << q << ", p_and_deps = " << p_and_deps << "\n";
+            auto tmp = commuteFL({q, p_and_deps});
             if (tmp.has_value) {
                 return foldDeps(qs, tmp->v1, {non_deps.append(tmp->v2)}, acc, m);
             }
@@ -172,21 +177,21 @@ namespace DarcsPatch {
             -- We have a new dependency which must be a direct one, so add it to
             -- 'direct' and all its dependencies to 'indirect'. The invariant that
             -- direct and indirect are disjoint is maintained because neither the
-            -- direct nor indirect deps of a patch contain its own 'PatchId'.
+            -- direct nor indirect deps of a patch contain its own 'PatchId<T, char_t, adapter_t>'.
             | otherwise =
                 foldDeps qs (q :>: p_and_deps) non_deps (S.insert j direct, addDeps j indirect)
             */
             return foldDeps(qs, p_and_deps.append(q), non_deps, {direct.append(j), addDeps(j, indirect, m).value_copy()}, m);
         }
         
-        Map<PatchId, Dep> depsGraph(const Map<PatchId, Dep> & m, const RL<PatchInfoAndG> & arg) {
+        template <typename T>
+        Map<PatchId<T, char_t, adapter_t>, Deps<char_t, adapter_t>> depsGraph(const Map<PatchId<T, char_t, adapter_t>, Deps<char_t, adapter_t>> & m, const RL<PatchInfoAndG<char_t, adapter_t>> & arg) {
+            PatchInfoAndG<char_t, adapter_t> p;
+            RL<PatchInfoAndG<char_t, adapter_t>> ps;
+            arg.extract(p, ps);
             if (ps.isNil()) {
                 return m;
             }
-
-            PatchInfoAndG p;
-            RL<PatchInfoAndG> ps;
-            arg.extract(x, xs);
             m = depsGraph(m, ps);
 
             /*
@@ -253,97 +258,100 @@ namespace DarcsPatch {
             return m;
         }
         
-        Map<PatchId, Dep> depsGraph(const std::deque<Patch> & ps) {
+        template <typename T>
+        Map<PatchId<T, char_t, adapter_t>, Deps<char_t, adapter_t>> depsGraph(const std::deque<Patch> & ps) {
             // patches are already allocated in deque
-            RL<PatchInfoAndG> p;
+            RL<PatchInfoAndG<char_t, adapter_t>> p;
             for(const Patch & patch : ps) p = p.append({&patch});
             return depsGraph({}, p);
         }
         
-        void calculateDeps() {
+        // void calculateDeps() {
             
-            hunksLC = {};
+        //     hunksLC = {};
             
-            for (Hunk & h1 : hunks) {
-                printf("brute forcing hunk p%zu\n", h1.idx+1);
-                if (h1.map == -1) {
-                    h1.map = hunksLC.size();
-                    hunksLC.push_back({{h1.line, h1.old_line.line_count(), h1.new_line.line_count()}, {}, h1.idx});
-                }
-                Dep & hlc1 = hunksLC[h1.map];
-                for (Hunk & h2 : hunks) {
-                    if (h1.idx >= h2.idx) {
-                        continue;
-                    }
-                    printf("  ");
-                    for (size_t i = 0, m = hunks.size(); i < m; i++) {
-                        printf("p%zu%s%s", hunks[i].idx+1, hunks[i].i ? "'" : "", i != m ? ";" : "");
-                    }
-                    printf("\n");
-                    printf("    testing hunk p%zu\n", h2.idx+1);
-                    if (h2.map == -1) {
-                        h2.map = hunksLC.size();
-                        hunksLC.push_back({{h2.line, h2.old_line.line_count(), h2.new_line.line_count()}, {}, h2.idx});
-                    }
-                    Dep & hlc2 = hunksLC[h2.map];
-                    auto r = commuteHunkLines(hlc1.hunk, hlc2.hunk);
-                    printf("      commuteHunkLines(p%zu, p%zu)\n", h1.idx+1, h2.idx+1);
-                    if (!r) {
-                        printf("        p%zu and p%zu are related\n", h1.idx+1, h2.idx+1);
-                        hlc1.deps.push_back(h2.map);
-                    } else {
-                        printf("        p%zu and p%zu are not related, swapping\n", h1.idx+1, h2.idx+1);
-                        hlc1.hunk.line = r->old_line;
-                        hlc2.hunk.line = r->new_line;
-                        h1.i = true;
-                        h2.i = true;
-                        std::swap(h1, h2);
-                    }
-                }
-            }
+        //     for (Hunk & h1 : hunks) {
+        //         printf("brute forcing hunk p%zu\n", h1.idx+1);
+        //         if (h1.map == -1) {
+        //             h1.map = hunksLC.size();
+        //             hunksLC.push_back({{h1.line, h1.old_line.line_count(), h1.new_line.line_count()}, {}, h1.idx});
+        //         }
+        //         Dep & hlc1 = hunksLC[h1.map];
+        //         for (Hunk & h2 : hunks) {
+        //             if (h1.idx >= h2.idx) {
+        //                 continue;
+        //             }
+        //             printf("  ");
+        //             for (size_t i = 0, m = hunks.size(); i < m; i++) {
+        //                 printf("p%zu%s%s", hunks[i].idx+1, hunks[i].i ? "'" : "", i != m ? ";" : "");
+        //             }
+        //             printf("\n");
+        //             printf("    testing hunk p%zu\n", h2.idx+1);
+        //             if (h2.map == -1) {
+        //                 h2.map = hunksLC.size();
+        //                 hunksLC.push_back({{h2.line, h2.old_line.line_count(), h2.new_line.line_count()}, {}, h2.idx});
+        //             }
+        //             Dep & hlc2 = hunksLC[h2.map];
+        //             auto r = commuteHunkLines(hlc1.hunk, hlc2.hunk);
+        //             printf("      commuteHunkLines(p%zu, p%zu)\n", h1.idx+1, h2.idx+1);
+        //             if (!r) {
+        //                 printf("        p%zu and p%zu are related\n", h1.idx+1, h2.idx+1);
+        //                 hlc1.deps.push_back(h2.map);
+        //             } else {
+        //                 printf("        p%zu and p%zu are not related, swapping\n", h1.idx+1, h2.idx+1);
+        //                 hlc1.hunk.line = r->old_line;
+        //                 hlc2.hunk.line = r->new_line;
+        //                 h1.i = true;
+        //                 h2.i = true;
+        //                 std::swap(h1, h2);
+        //             }
+        //         }
+        //     }
             
-            for (size_t i = 0, m = hunksLC.size(); i < m; i++) {
-                for (size_t ii = 0, mm = hunksLC[i].deps.size(); ii < mm; ii++) {
-                    printf("  deps p%zu -> p%zu\n", hunksLC[hunksLC[i].deps[ii]].idx+1, hunksLC[i].idx+1);
-                }
-            }
-            printf("\n");
-        }
+        //     for (size_t i = 0, m = hunksLC.size(); i < m; i++) {
+        //         for (size_t ii = 0, mm = hunksLC[i].deps.size(); ii < mm; ii++) {
+        //             printf("  deps p%zu -> p%zu\n", hunksLC[hunksLC[i].deps[ii]].idx+1, hunksLC[i].idx+1);
+        //         }
+        //     }
+        //     printf("\n");
+        // }
         
         // TODO
-        void reorder(Hunk p, Hunk plc) {
-            if (hunksLC.size() > 1) {
-                for(size_t i = hunksLC.size()-2; i != -1; i--) {
-                    HunkLC o = hunksLC[i];
-                    HunkLC & n = plc;
-                    printf("calling commuteHunkLines( patch #%zu ( %zu, %zu, %zu ) , patch #%zu ( %zu, %zu, %zu ) )\n", i, o.line, o.old_line, o.new_line, hunksLC.size()-1, n.line, n.old_line, n.new_line);
-                    auto r = commuteHunkLines(o, n);
-                    printf("  patch #%zu ( %zu, %zu, %zu ) is related to patch #%zu ( %zu, %zu, %zu ) : %s\n", hunksLC.size()-1, n.line, n.old_line, n.new_line, i, o.line, o.old_line, o.new_line, r.has_value() ? "true" : "false");
-                    if (r.has_value()) {
-                        printf("    offset: old line %zu, new line %zu\n", r->old_line, r->new_line);
-                    } else {
-                        printf("    no offset\n");
-                    }
-                }
-            }
-        }
+        // void reorder(Hunk p, Hunk plc) {
+        //     if (hunksLC.size() > 1) {
+        //         for(size_t i = hunksLC.size()-2; i != -1; i--) {
+        //             HunkLC o = hunksLC[i];
+        //             HunkLC & n = plc;
+        //             printf("calling commuteHunkLines( patch #%zu ( %zu, %zu, %zu ) , patch #%zu ( %zu, %zu, %zu ) )\n", i, o.line, o.old_line, o.new_line, hunksLC.size()-1, n.line, n.old_line, n.new_line);
+        //             auto r = commuteHunkLines(o, n);
+        //             printf("  patch #%zu ( %zu, %zu, %zu ) is related to patch #%zu ( %zu, %zu, %zu ) : %s\n", hunksLC.size()-1, n.line, n.old_line, n.new_line, i, o.line, o.old_line, o.new_line, r.has_value() ? "true" : "false");
+        //             if (r.has_value()) {
+        //                 printf("    offset: old line %zu, new line %zu\n", r->old_line, r->new_line);
+        //             } else {
+        //                 printf("    no offset\n");
+        //             }
+        //         }
+        //     }
+        // }
         
-        std::optional<HunkOffset> commuteHunkLines(const HunkLC & l1, const HunkLC & l2) {
-            if (l1.line + l1.new_line < l2.line) {
-                return {{ l2.line - l1.new_line + l1.old_line, l1.line }};
-            }
-            else if (l2.line + l2.old_line < l1.line) {
-                return {{ l2.line, l1.line + l2.new_line - l2.old_line }};
-            }
-            else if (l2.old_line != 0 && l1.old_line != 0 && l2.new_line != 0 && l1.new_line != 0 && l1.line + l1.new_line == l2.line) {
-                return {{ l2.line - l1.new_line + l1.old_line, l1.line }};
-            }
-            else if (l2.old_line != 0 && l1.old_line != 0 && l2.new_line != 0 && l1.new_line != 0 && l2.line + l2.old_line == l1.line) {
-                return {{ l2.line, l1.line + l2.new_line - l2.old_line }};
-            }
-            else return std::nullopt;
-        }
+        // std::optional<HunkOffset> commuteHunkLines(const HunkLC & l1, const HunkLC & l2) {
+        //     if (l1.line + l1.new_line < l2.line) {
+        //         return {{ l2.line - l1.new_line + l1.old_line, l1.line }};
+        //     }
+        //     else if (l2.line + l2.old_line < l1.line) {
+        //         return {{ l2.line, l1.line + l2.new_line - l2.old_line }};
+        //     }
+        //     else if (l2.old_line != 0 && l1.old_line != 0 && l2.new_line != 0 && l1.new_line != 0 && l1.line + l1.new_line == l2.line) {
+        //         return {{ l2.line - l1.new_line + l1.old_line, l1.line }};
+        //     }
+        //     else if (l2.old_line != 0 && l1.old_line != 0 && l2.new_line != 0 && l1.new_line != 0 && l2.line + l2.old_line == l1.line) {
+        //         return {{ l2.line, l1.line + l2.new_line - l2.old_line }};
+        //     }
+        //     else return std::nullopt;
+        // }
     };
     
     using Patcher_T = Patcher<char, StringAdapter::CharAdapter>;
 }
+
+#endif
