@@ -1003,7 +1003,7 @@ namespace DarcsPatch {
             const_iterator r;
             for (; b != e; ++b) {
                 if (b >= first && b < last) {
-                    r->from(b+1);
+                    r = b+1;
                 } else {
                     copy.base->emplace(*b);
                 }
