@@ -107,16 +107,16 @@ namespace DarcsPatch {
     std::shared_ptr<Patch> invert(std::shared_ptr<Patch> p) {
         return p->invert();
     }
-}
 
-::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Patch & item) {
-    return item.to_stream(os);
-}
+    ::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::Patch & item) {
+        return item.to_stream(os);
+    }
 
-::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::NilFL_T & item) {
-    return os << "{ NilFL }";
-}
+    ::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::NilFL_T & item) {
+        return os << "{ NilFL }";
+    }
 
-::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::NilRL_T & item) {
-    return os << "{ NilRL }";
+    ::std::ostream& operator <<(::std::ostream& os, const DarcsPatch::NilRL_T & item) {
+        return os << "{ NilRL }";
+    }
 }

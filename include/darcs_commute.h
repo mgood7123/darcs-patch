@@ -1053,73 +1053,61 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    Maybe<Tuple2<FL<Core_FP<char_t, adapter_t>>, RL<Core_FP<char_t, adapter_t>>>> left(const RL<Core_FP<char_t, adapter_t>> & p1, const FL<Core_FP<char_t, adapter_t>> & p2);
-
-    template <
-        typename char_t,
-        typename adapter_t,
-        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
-    >
-    Maybe<Tuple2<FL<Core_FP<char_t, adapter_t>>, RL<Core_FP<char_t, adapter_t>>>> right(const RL<Core_FP<char_t, adapter_t>> & p1, const FL<Core_FP<char_t, adapter_t>> & p2) {
-        std::cout << "right called with arguments p1 = " << p1 << ", p2 = " << p2 << "\n";
-        RL<Core_FP<char_t, adapter_t>> as = p1;
-        if (p2 == NilFL) {
-            return {{p2, as}};
+    Maybe<Tuple2<FL<Core_FP<char_t, adapter_t>>, RL<Core_FP<char_t, adapter_t>>>> right_or_left(const RL<Core_FP<char_t, adapter_t>> & p1, const FL<Core_FP<char_t, adapter_t>> & p2, bool is_left) {
+        if (is_left) {
+            std::cout << "left called with arguments p1 = " << p1 << ", p2 = " << p2 << "\n";
+            auto & bs = p2;
+            if (p1 == NilRL) {
+                return {{bs, p1}};
+            }
+            RL<Core_FP<char_t, adapter_t>> as;
+            Core_FP<char_t, adapter_t> a;
+            p1.extract(a, as);
+            Tuple2<Core_FP<char_t, adapter_t>, FL<Core_FP<char_t, adapter_t>>> t;
+            t.v1 = a;
+            t.v2 = bs;
+            auto tmp = commuterIdFL(t);
+            if (!tmp.has_value) {
+                return Nothing();
+            }
+            auto bs1 = tmp->v1;
+            auto a1 = tmp->v2;
+            auto tmp1 = right_or_left(as, bs1, false);
+            if (!tmp1.has_value) {
+                return Nothing();
+            }
+            auto bs2 = tmp1->v1;
+            auto as1 = tmp1->v2;
+            Tuple2<FL<Core_FP<char_t, adapter_t>>, RL<Core_FP<char_t, adapter_t>>> t1;
+            t1.v1 = bs2;
+            t1.v2 = as1.push(a1);
+            return {t1};
+        } else {
+            std::cout << "right called with arguments p1 = " << p1 << ", p2 = " << p2 << "\n";
+            RL<Core_FP<char_t, adapter_t>> as = p1;
+            if (p2 == NilFL) {
+                return {{p2, as}};
+            }
+            FL<Core_FP<char_t, adapter_t>> bs;
+            Core_FP<char_t, adapter_t> b;
+            p2.extract(b, bs);
+            Tuple2<RL<Core_FP<char_t, adapter_t>>, Core_FP<char_t, adapter_t>> t;
+            t.v1 = as;
+            t.v2 = b;
+            auto tmp = commuterRLId(t);
+            if (!tmp.has_value) {
+                return Nothing();
+            }
+            auto b1 = tmp->v1;
+            auto as1 = tmp->v2;
+            auto tmp1 = right_or_left(as1, bs, true);
+            if (!tmp1.has_value) {
+                return tmp1;
+            }
+            auto bs1 = tmp1->v1;
+            auto as2 = tmp1->v2;
+            return {{bs1.push(b1), as2}};
         }
-        FL<Core_FP<char_t, adapter_t>> bs;
-        Core_FP<char_t, adapter_t> b;
-        p2.extract(b, bs);
-        Tuple2<RL<Core_FP<char_t, adapter_t>>, Core_FP<char_t, adapter_t>> t;
-        t.v1 = as;
-        t.v2 = b;
-        auto tmp = commuterRLId(t);
-        if (!tmp.has_value) {
-            return Nothing();
-        }
-        auto b1 = tmp->v1;
-        auto as1 = tmp->v2;
-        auto tmp1 = left(as1, bs);
-        if (!tmp1.has_value) {
-            return tmp1;
-        }
-        auto bs1 = tmp1->v1;
-        auto as2 = tmp1->v2;
-        return {{bs1.push(b1), as2}};
-    }
-
-    template <
-        typename char_t,
-        typename adapter_t,
-        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
-    >
-    Maybe<Tuple2<FL<Core_FP<char_t, adapter_t>>, RL<Core_FP<char_t, adapter_t>>>> left(const RL<Core_FP<char_t, adapter_t>> & p1, const FL<Core_FP<char_t, adapter_t>> & p2) {
-        std::cout << "left called with arguments p1 = " << p1 << ", p2 = " << p2 << "\n";
-        auto & bs = p2;
-        if (p1 == NilRL) {
-            return {{bs, p1}};
-        }
-        RL<Core_FP<char_t, adapter_t>> as;
-        Core_FP<char_t, adapter_t> a;
-        p1.extract(a, as);
-        Tuple2<Core_FP<char_t, adapter_t>, FL<Core_FP<char_t, adapter_t>>> t;
-        t.v1 = a;
-        t.v2 = bs;
-        auto tmp = commuterIdFL(t);
-        if (!tmp.has_value) {
-            return Nothing();
-        }
-        auto bs1 = tmp->v1;
-        auto a1 = tmp->v2;
-        auto tmp1 = right(as, bs1);
-        if (!tmp1.has_value) {
-            return Nothing();
-        }
-        auto bs2 = tmp1->v1;
-        auto as1 = tmp1->v2;
-        Tuple2<FL<Core_FP<char_t, adapter_t>>, RL<Core_FP<char_t, adapter_t>>> t1;
-        t1.v1 = bs2;
-        t1.v2 = as1.push(a1);
-        return {t1};
     }
 
     template <
@@ -1129,7 +1117,7 @@ namespace DarcsPatch {
     >
     Maybe<Tuple2<FL<Core_FP<char_t, adapter_t>>, RL<Core_FP<char_t, adapter_t>>>> commuterRLFL(const Tuple2<RL<Core_FP<char_t, adapter_t>>, FL<Core_FP<char_t, adapter_t>>> & p) {
         std::cout << "commuterRLFL called with arguments p = " << p << "\n";
-        return right(p.v1, p.v2);
+        return right_or_left(p.v1, p.v2, false);
     }
 
     template <
