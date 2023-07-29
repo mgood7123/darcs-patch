@@ -375,13 +375,10 @@ namespace DarcsPatch {
     struct FL_BASE {
         
         typedef T TYPE;
-        mutable std::forward_list<T> list;
-        mutable std::size_t len;
+        mutable std::forward_list<T> list = {};
+        mutable std::size_t len = 0;
         
-        FL_BASE() {
-            list = {};
-            len = 0;
-        }
+        FL_BASE() = default;
 
         FL_BASE(const FL_BASE & other) {
             list = other.list;
@@ -527,13 +524,10 @@ namespace DarcsPatch {
     template <typename T>
     struct RL_BASE {
         typedef T TYPE;
-        mutable std::list<T> list;
-        mutable std::size_t len;
+        mutable std::list<T> list = {};
+        mutable std::size_t len = 0;
         
-        RL_BASE() {
-            list = {};
-            len = 0;
-        }
+        RL_BASE() = default;
 
         RL_BASE(const RL_BASE & other) {
             list = other.list;
@@ -905,28 +899,15 @@ namespace DarcsPatch {
                 INDEXED_ITERATOR_ASSIGN(p, e, ForwardIter);
             }
             const_iterator r;
-            if (p < e) {
-                std::cout << "b: " << b << std::endl;
-                std::cout << "p: " << p << std::endl;
-            } else {
-                std::cout << "b: " << b << std::endl;
-                std::cout << "p: " << "end()" << std::endl;
-            }
             for (; b != e; ++b) {
                 if (b == p) {
                     r = b;
-                    if (r < e) {
-                        std::cout << "emplacing item at r: " << r << std::endl;
-                    } else {
-                        std::cout << "emplacing item at r: " << "end()" << std::endl;
-                    }
                     copy.base->emplace(item);
                 }
                 copy.base->emplace(*b);
             }
             if (e == p) {
                 r = const_iterator(e.origin[0], e.index);
-                std::cout << "emplacing item at r: " << "end()" << std::endl;
                 copy.base->emplace(item);
             }
             auto s = copy.base->slice(0, slice->get_end()+1);
