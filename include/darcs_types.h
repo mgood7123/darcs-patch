@@ -10,11 +10,209 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <memory>
+
+namespace DarcsPatch {
+    // STD IMPL - LLDB by default will not step into std code, this is good EXCEPT if we want to step into std::function
+    // stepping into std::function is required in order to step info our assigned function callback
+
+    /**
+      *  @brief  Forward an lvalue.
+      *  @return The parameter cast to the specified type.
+      *
+      *  This function is used to implement "perfect forwarding".
+      */
+    template<typename _Tp>
+    constexpr _Tp&&
+    forward(typename std::remove_reference<_Tp>::type& __t) noexcept
+    { return static_cast<_Tp&&>(__t); }
+
+    /**
+      *  @brief  Forward an rvalue.
+      *  @return The parameter cast to the specified type.
+      *
+      *  This function is used to implement "perfect forwarding".
+      */
+    template<typename _Tp>
+    constexpr _Tp&&
+    forward(typename std::remove_reference<_Tp>::type&& __t) noexcept
+    {
+        static_assert(!std::is_lvalue_reference<_Tp>::value, "template argument"
+            " substituting _Tp is an lvalue reference type");
+        return static_cast<_Tp&&>(__t);
+    }
+
+    namespace detail
+    {
+        template<class>
+        constexpr bool is_reference_wrapper_v = false;
+        template<class U>
+        constexpr bool is_reference_wrapper_v<std::reference_wrapper<U>> = true;
+    
+        template<class C, class Pointed, class T1, class... Args>
+        constexpr decltype(auto) invoke_memptr(Pointed C::* f, T1&& t1, Args&&... args)
+        {
+            if constexpr (std::is_function_v<Pointed>)
+            {
+                if constexpr (std::is_base_of_v<C, std::decay_t<T1>>)
+                    return (DarcsPatch::forward<T1>(t1).*f)(DarcsPatch::forward<Args>(args)...);
+                else if constexpr (is_reference_wrapper_v<std::decay_t<T1>>)
+                    return (t1.get().*f)(DarcsPatch::forward<Args>(args)...);
+                else
+                    return ((*DarcsPatch::forward<T1>(t1)).*f)(DarcsPatch::forward<Args>(args)...);
+            }
+            else
+            {
+                static_assert(std::is_object_v<Pointed> && sizeof...(args) == 0);
+                if constexpr (std::is_base_of_v<C, std::decay_t<T1>>)
+                    return DarcsPatch::forward<T1>(t1).*f;
+                else if constexpr (is_reference_wrapper_v<std::decay_t<T1>>)
+                    return t1.get().*f;
+                else
+                    return (*DarcsPatch::forward<T1>(t1)).*f;
+            }
+        }
+    } // namespace detail
+    
+    template<class F, class... Args>
+    constexpr std::invoke_result_t<F, Args...> invoke(F&& f, Args&&... args)
+        noexcept(std::is_nothrow_invocable_v<F, Args...>)
+    {
+        if constexpr (std::is_member_pointer_v<std::decay_t<F>>)
+            return DarcsPatch::detail::invoke_memptr(f, DarcsPatch::forward<Args>(args)...);
+        else
+            return DarcsPatch::forward<F>(f)(DarcsPatch::forward<Args>(args)...);
+    }
+
+    template<typename Result,typename ...Args>
+    struct abstract_function
+    {
+        virtual Result operator()(Args... args)=0;
+        virtual abstract_function *clone() const =0;
+        virtual ~abstract_function() = default;
+    };
+
+    template<typename Func,typename Result,typename ...Args>
+    class concrete_function: public abstract_function<Result,Args...>
+    {
+        Func f;
+    public:
+        concrete_function(const Func &x)
+            : f(x)
+        {}
+        Result operator()(Args... args) override
+        {
+            return DarcsPatch::invoke(f, args...);
+        }
+        concrete_function *clone() const override
+        {
+            return new concrete_function{f};
+        }
+    };
+
+    template<typename Func>
+    struct func_filter
+    {
+        typedef Func type;
+    };
+    template<typename Result,typename ...Args>
+    struct func_filter<Result(Args...)>
+    {
+        typedef Result (*type)(Args...);
+    };
+
+    template<typename signature>
+    class function;
+
+    template<typename Result,typename ...Args>
+    class function<Result(Args...)>
+    {
+        abstract_function<Result,Args...> *f;
+    public:
+        function()
+            : f(nullptr)
+        {}
+        template<typename Func> function(const Func &x)
+            : f(new concrete_function<typename func_filter<Func>::type,Result,Args...>(x))
+        {}
+        function(const function &rhs)
+            : f(rhs.f ? rhs.f->clone() : nullptr)
+        {}
+        function &operator=(const function &rhs)
+        {
+            if( (&rhs != this ) && (rhs.f) )
+            {
+                auto *temp = rhs.f->clone();
+                delete f;
+                f = temp;
+            }
+            return *this;
+        }
+        template<typename Func> function &operator=(const Func &x)
+        {
+            auto *temp = new concrete_function<typename func_filter<Func>::type,Result,Args...>(x);
+            delete f;
+            f = temp;
+            return *this;
+        }
+        Result operator()(Args... args) const
+        {
+            if(f)
+                return DarcsPatch::invoke(*f, args...);
+            else
+                throw std::bad_function_call();
+        }
+        ~function()
+        {
+            delete f;
+        }
+    };
+
+    template <typename R>
+    struct LazyValue {
+        std::shared_ptr<function<R()>> func;
+        mutable std::shared_ptr<R> value;
+        mutable std::shared_ptr<bool> called;
+
+        LazyValue(const function<R()> & f) : func(std::make_shared<function<R()>>(f)), called(std::make_shared<bool>(false)) {}
+
+        LazyValue(const LazyValue<R> & f) {
+            func = f.func;
+            value = f.value;
+            called = f.called;
+        }
+        LazyValue(const LazyValue<R> && f) {
+            func = f.func;
+            value = f.value;
+            called = f.called;
+        }
+        LazyValue<R>&operator=(const LazyValue<R> & f) {
+            func = f.func;
+            value = f.value;
+            called = f.called;
+            return *this;
+        }
+        LazyValue<R>&operator=(const LazyValue<R> && f) {
+            func = f.func;
+            value = f.value;
+            called = f.called;
+            return *this;
+        }
+        R & operator ()() const {
+            if (*called.get()) {
+                return *value.get();
+            } else {
+                value = std::make_shared<R>((*func.get())());
+                called = std::make_shared<bool>(true);
+                return *value.get();
+            }
+        }
+    };
+}
 
 #include <string_adapter.h>
 #include <list>
 #include <forward_list>
-#include <memory>
 
 #include <sha1.h>
 
@@ -2307,209 +2505,6 @@ namespace DarcsPatch {
         // invert (a :> b) = invert b :> invert a
         return Tuple2<T, T>(invert(p.v1), invert(p.v2));
     }
-
-
-
-
-
-
-
-
-
-    // STD IMPL - LLDB by default will not step into std code, this is good EXCEPT if we want to step into std::function
-
-    /**
-      *  @brief  Forward an lvalue.
-      *  @return The parameter cast to the specified type.
-      *
-      *  This function is used to implement "perfect forwarding".
-      */
-    template<typename _Tp>
-    constexpr _Tp&&
-    forward(typename std::remove_reference<_Tp>::type& __t) noexcept
-    { return static_cast<_Tp&&>(__t); }
-
-    /**
-      *  @brief  Forward an rvalue.
-      *  @return The parameter cast to the specified type.
-      *
-      *  This function is used to implement "perfect forwarding".
-      */
-    template<typename _Tp>
-    constexpr _Tp&&
-    forward(typename std::remove_reference<_Tp>::type&& __t) noexcept
-    {
-        static_assert(!std::is_lvalue_reference<_Tp>::value, "template argument"
-            " substituting _Tp is an lvalue reference type");
-        return static_cast<_Tp&&>(__t);
-    }
-
-    namespace detail
-    {
-        template<class>
-        constexpr bool is_reference_wrapper_v = false;
-        template<class U>
-        constexpr bool is_reference_wrapper_v<std::reference_wrapper<U>> = true;
-    
-        template<class C, class Pointed, class T1, class... Args>
-        constexpr decltype(auto) invoke_memptr(Pointed C::* f, T1&& t1, Args&&... args)
-        {
-            if constexpr (std::is_function_v<Pointed>)
-            {
-                if constexpr (std::is_base_of_v<C, std::decay_t<T1>>)
-                    return (DarcsPatch::forward<T1>(t1).*f)(DarcsPatch::forward<Args>(args)...);
-                else if constexpr (is_reference_wrapper_v<std::decay_t<T1>>)
-                    return (t1.get().*f)(DarcsPatch::forward<Args>(args)...);
-                else
-                    return ((*DarcsPatch::forward<T1>(t1)).*f)(DarcsPatch::forward<Args>(args)...);
-            }
-            else
-            {
-                static_assert(std::is_object_v<Pointed> && sizeof...(args) == 0);
-                if constexpr (std::is_base_of_v<C, std::decay_t<T1>>)
-                    return DarcsPatch::forward<T1>(t1).*f;
-                else if constexpr (is_reference_wrapper_v<std::decay_t<T1>>)
-                    return t1.get().*f;
-                else
-                    return (*DarcsPatch::forward<T1>(t1)).*f;
-            }
-        }
-    } // namespace detail
-    
-    template<class F, class... Args>
-    constexpr std::invoke_result_t<F, Args...> invoke(F&& f, Args&&... args)
-        noexcept(std::is_nothrow_invocable_v<F, Args...>)
-    {
-        if constexpr (std::is_member_pointer_v<std::decay_t<F>>)
-            return DarcsPatch::detail::invoke_memptr(f, DarcsPatch::forward<Args>(args)...);
-        else
-            return DarcsPatch::forward<F>(f)(DarcsPatch::forward<Args>(args)...);
-    }
-
-    template<typename Result,typename ...Args>
-    struct abstract_function
-    {
-        virtual Result operator()(Args... args)=0;
-        virtual abstract_function *clone() const =0;
-        virtual ~abstract_function() = default;
-    };
-
-    template<typename Func,typename Result,typename ...Args>
-    class concrete_function: public abstract_function<Result,Args...>
-    {
-        Func f;
-    public:
-        concrete_function(const Func &x)
-            : f(x)
-        {}
-        Result operator()(Args... args) override
-        {
-            return DarcsPatch::invoke(f, args...);
-        }
-        concrete_function *clone() const override
-        {
-            return new concrete_function{f};
-        }
-    };
-
-    template<typename Func>
-    struct func_filter
-    {
-        typedef Func type;
-    };
-    template<typename Result,typename ...Args>
-    struct func_filter<Result(Args...)>
-    {
-        typedef Result (*type)(Args...);
-    };
-
-    template<typename signature>
-    class function;
-
-    template<typename Result,typename ...Args>
-    class function<Result(Args...)>
-    {
-        abstract_function<Result,Args...> *f;
-    public:
-        function()
-            : f(nullptr)
-        {}
-        template<typename Func> function(const Func &x)
-            : f(new concrete_function<typename func_filter<Func>::type,Result,Args...>(x))
-        {}
-        function(const function &rhs)
-            : f(rhs.f ? rhs.f->clone() : nullptr)
-        {}
-        function &operator=(const function &rhs)
-        {
-            if( (&rhs != this ) && (rhs.f) )
-            {
-                auto *temp = rhs.f->clone();
-                delete f;
-                f = temp;
-            }
-            return *this;
-        }
-        template<typename Func> function &operator=(const Func &x)
-        {
-            auto *temp = new concrete_function<typename func_filter<Func>::type,Result,Args...>(x);
-            delete f;
-            f = temp;
-            return *this;
-        }
-        Result operator()(Args... args) const
-        {
-            if(f)
-                return DarcsPatch::invoke(*f, args...);
-            else
-                throw std::bad_function_call();
-        }
-        ~function()
-        {
-            delete f;
-        }
-    };
-
-    template <typename R>
-    struct LazyValue {
-        std::shared_ptr<function<R()>> func;
-        mutable std::shared_ptr<R> value;
-        mutable std::shared_ptr<bool> called;
-
-        LazyValue(const function<R()> & f) : func(std::make_shared<function<R()>>(f)), called(std::make_shared<bool>(false)) {}
-
-        LazyValue(const LazyValue<R> & f) {
-            func = f.func;
-            value = f.value;
-            called = f.called;
-        }
-        LazyValue(const LazyValue<R> && f) {
-            func = f.func;
-            value = f.value;
-            called = f.called;
-        }
-        LazyValue<R>&operator=(const LazyValue<R> & f) {
-            func = f.func;
-            value = f.value;
-            called = f.called;
-            return *this;
-        }
-        LazyValue<R>&operator=(const LazyValue<R> && f) {
-            func = f.func;
-            value = f.value;
-            called = f.called;
-            return *this;
-        }
-        R & operator ()() const {
-            if (*called.get()) {
-                return *value.get();
-            } else {
-                value = std::make_shared<R>((*func.get())());
-                called = std::make_shared<bool>(true);
-                return *value.get();
-            }
-        }
-    };
 
     template <
         typename char_t,
