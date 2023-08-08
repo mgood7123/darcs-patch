@@ -627,6 +627,10 @@ namespace DarcsPatch {
             return cend();
         }
 
+        void THROW(const char * what) const {
+            throw std::runtime_error(what);
+        }
+
         Slice<T, FL_BASE<T>>* slice(std::size_t start, std::size_t end) {
             if (start == 0 && end == 0 && len == 0) {
             } else {
@@ -634,7 +638,7 @@ namespace DarcsPatch {
                     return slice(0, 0);
                 }
                 if (end > len) {
-                    throw std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                    THROW("ATTEMPTING TO SLICE OUT OF RANGE");
                 }
             }
             return new Slice<T, FL_BASE<T>>(this, start, end);
@@ -646,7 +650,7 @@ namespace DarcsPatch {
                     return slice(0, 0);
                 }
                 if (end > len) {
-                    throw std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                    THROW("ATTEMPTING TO SLICE OUT OF RANGE");
                 }
             }
             return new CSlice<T, FL_BASE<T>>(this, start, end);
@@ -658,7 +662,7 @@ namespace DarcsPatch {
                     return slice(0, 0);
                 }
                 if (end > len) {
-                    throw std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                    THROW("ATTEMPTING TO SLICE OUT OF RANGE");
                 }
             }
             return new CSlice<T, FL_BASE<T>>(this, start, end);
@@ -666,13 +670,13 @@ namespace DarcsPatch {
         
         T & get_item_at_index(const std::size_t index) {
             if (index >= len) {
-                throw std::runtime_error("INDEX OUT OF RANGE");
+                THROW("INDEX OUT OF RANGE");
             }
             return *std::next(list.begin(), index);
         }
         const T & get_item_at_index(const std::size_t index) const {
             if (index >= len) {
-                throw std::runtime_error("INDEX OUT OF RANGE");
+                THROW("INDEX OUT OF RANGE");
             }
             return *std::next(list.begin(), index);
         }
@@ -776,6 +780,10 @@ namespace DarcsPatch {
             return cend();
         }
 
+        void THROW(const char * what) const {
+            throw std::runtime_error(what);
+        }
+
         Slice<T, RL_BASE<T>>* slice(std::size_t start, std::size_t end) {
             if (start == 0 && end == 0 && len == 0) {
             } else {
@@ -783,7 +791,7 @@ namespace DarcsPatch {
                     return slice(0, 0);
                 }
                 if (end > len) {
-                    throw std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                    THROW("ATTEMPTING TO SLICE OUT OF RANGE");
                 }
             }
             return new Slice<T, RL_BASE<T>>(this, start, end);
@@ -795,7 +803,7 @@ namespace DarcsPatch {
                     return slice(0, 0);
                 }
                 if (end > len) {
-                    throw std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                    THROW("ATTEMPTING TO SLICE OUT OF RANGE");
                 }
             }
             return new CSlice<T, RL_BASE<T>>(this, start, end);
@@ -807,7 +815,7 @@ namespace DarcsPatch {
                     return slice(0, 0);
                 }
                 if (end > len) {
-                    throw std::runtime_error("ATTEMPTING TO SLICE OUT OF RANGE");
+                    THROW("ATTEMPTING TO SLICE OUT OF RANGE");
                 }
             }
             return new CSlice<T, RL_BASE<T>>(this, start, end);
@@ -815,13 +823,13 @@ namespace DarcsPatch {
 
         T & get_item_at_index(const std::size_t index) {
             if (index >= len) {
-                throw std::runtime_error("INDEX OUT OF RANGE");
+                THROW("INDEX OUT OF RANGE");
             }
             return *std::next(list.begin(), index);
         }
         const T & get_item_at_index(const std::size_t index) const {
             if (index >= len) {
-                throw std::runtime_error("INDEX OUT OF RANGE");
+                THROW("INDEX OUT OF RANGE");
             }
             return *std::next(list.begin(), index);
         }
@@ -1461,44 +1469,48 @@ namespace DarcsPatch {
         {
         }
 
+        void THROW(const char * what) const {
+            throw std::runtime_error(what);
+        }
+
         const T & value_ref() const {
             if (!has_value) {
-                throw std::runtime_error("attempting to obtain the value of nothing");
+                THROW("attempting to obtain the value of nothing");
             }
             return value;
         }
 
         T & value_ref() {
             if (!has_value) {
-                throw std::runtime_error("attempting to obtain the value of nothing");
+                THROW("attempting to obtain the value of nothing");
             }
             return value;
         }
 
         const T value_copy() const {
             if (!has_value) {
-                throw std::runtime_error("attempting to obtain the value of nothing");
+                THROW("attempting to obtain the value of nothing");
             }
             return value;
         }
 
         T value_copy() {
             if (!has_value) {
-                throw std::runtime_error("attempting to obtain the value of nothing");
+                THROW("attempting to obtain the value of nothing");
             }
             return value;
         }
 
         const T* operator -> () const {
             if (!has_value) {
-                throw std::runtime_error("attempting to obtain the value of nothing");
+                THROW("attempting to obtain the value of nothing");
             }
             return &value;
         }
 
         T* operator -> () {
             if (!has_value) {
-                throw std::runtime_error("attempting to obtain the value of nothing");
+                THROW("attempting to obtain the value of nothing");
             }
             return &value;
         }
