@@ -2523,7 +2523,7 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    void renderDepsGraphAsDot(const DepsGraph<char_t, adapter_t> & g) {
+    void renderDepsGraphAsDot(const DepsGraph<char_t, adapter_t> & g, bool show_names = false, bool show_hashes = true) {
         std::cout << "digraph {";
         auto indent = "   ";
         std::cout << "\n" << indent << "graph [rankdir=LR];";
@@ -2542,7 +2542,19 @@ namespace DarcsPatch {
         auto showEdges = [&](auto & key, auto & value) {
             auto begin = value.begin();
             if (begin != value.end()) {
-                std::cout << "\n" << indent << "\"" << showID(key) << "\" -> " << "{\"" << showID(*begin) << "\"}";
+                if (show_hashes) {
+                    std::cout << "\n" << indent << "\"" << showID(key) << "\"";
+                    if (show_names) {
+                        std::cout << " [label=" << key.name << "]";
+                    }
+                    std::cout << " -> " << "{\"" << showID(*begin) << "\"";
+                    if (show_names) {
+                        std::cout << " [label=" << (*begin).name << "]";
+                    }
+                    std::cout << "}";
+                } else {
+                    std::cout << "\n" << indent << key.name << " -> " << (*begin).name;
+                }
             }
         };
 

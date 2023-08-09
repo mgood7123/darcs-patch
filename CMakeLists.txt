@@ -16,7 +16,6 @@ testBuilder_add_include(darcs_patch include)
 testBuilder_add_include(darcs_patch hash-library)
 testBuilder_add_source(darcs_patch hash-library/sha1.cpp)
 testBuilder_add_source(darcs_patch src/darcs.cpp)
-testBuilder_add_source(darcs_patch src/darcs1.cpp)
 testBuilder_add_library(darcs_patch StringAdapter)
 testBuilder_build_shared_library(darcs_patch)
 
