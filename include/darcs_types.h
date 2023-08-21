@@ -12,6 +12,8 @@
 #include <map>
 #include <memory>
 
+#define DARCH_PATCH_DEBUG_LOGGING false
+
 namespace DarcsPatch {
     // STD IMPL - LLDB by default will not step into std code, this is good EXCEPT if we want to step into std::function
     // stepping into std::function is required in order to step info our assigned function callback
@@ -2062,6 +2064,8 @@ namespace DarcsPatch {
             THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); })
         {}
 
+        uint64_t additional_data = 0;
+
         adapter_t date;
         adapter_t name;
         adapter_t author;
@@ -2085,6 +2089,25 @@ namespace DarcsPatch {
         {
         }
 
+        PatchInfo(uint64_t additional_data, const adapter_t & name) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); }),
+            additional_data(additional_data),
+            name(name)
+        {
+        }
+
+        PatchInfo(uint64_t additional_data, const adapter_t & date, const adapter_t & name, const adapter_t & author, const RL<adapter_t> & log) :
+            THIS::Comparable([](auto & a, auto & b) { return StringAdapter::compare_3(a, b, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); }),
+            THIS::Hashable([](auto & a) { return StringAdapter::hash_3(a, &THIS::date, &THIS::name, &THIS::author, &THIS::log, &THIS::legacyIsInverted); }),
+            additional_data(additional_data),
+            date(date),
+            name(name),
+            author(author),
+            log(log)
+        {
+        }
+
         void to_string() const {
             std::cout << *this;
         }
@@ -2097,6 +2120,7 @@ namespace DarcsPatch {
     using PatchInfo_T = PatchInfo<char, StringAdapter::CharAdapter>;
 
     PatchInfo_T makePatchInfo_T(const StringAdapter::CharAdapter & patch_id_unique_label);
+    PatchInfo_T makePatchInfo_T(uint64_t additional_data, const StringAdapter::CharAdapter & patch_id_unique_label);
     
     template <
         typename char_t,
@@ -2376,8 +2400,8 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    Named<Core_FP<char_t, adapter_t>, char_t, adapter_t> makeNamedWithType(std::shared_ptr<Patch> patch_type) {
-        return Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>(PatchInfo<char_t, adapter_t>(), {}, ToFL(Core_FP<char_t, adapter_t>(patch_type)));
+    Named<Core_FP<char_t, adapter_t>, char_t, adapter_t> makeNamedWithType(const adapter_t & patch_id_unique_label, std::shared_ptr<Patch> patch_type) {
+        return Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>(PatchInfo<char_t, adapter_t>({}, patch_id_unique_label, {}, {}), {}, ToFL(Core_FP<char_t, adapter_t>(patch_type)));
     }
 
     template <
@@ -2385,13 +2409,34 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
+    Named<Core_FP<char_t, adapter_t>, char_t, adapter_t> makeNamedWithType(uint64_t additional_data, const adapter_t & patch_id_unique_label, std::shared_ptr<Patch> patch_type) {
+        return Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>(PatchInfo<char_t, adapter_t>(additional_data, {}, patch_id_unique_label, {}, {}), {}, ToFL(Core_FP<char_t, adapter_t>(patch_type)));
+    }
+
+
+    template <
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
     Named<Core_FP<char_t, adapter_t>, char_t, adapter_t> makeNamedHunk(const adapter_t & patch_id_unique_label, const std::size_t & line, const adapter_t& old_line, const adapter_t& new_line) {
-        return makeNamedWithType<char_t, adapter_t>(patch_id_unique_label, makeHunk(line, old_line, new_line));
+        return makeNamedWithType<char_t, adapter_t>(patch_id_unique_label, makeHunk<char_t, adapter_t>(line, old_line, new_line));
+    }
+
+    template <
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
+    Named<Core_FP<char_t, adapter_t>, char_t, adapter_t> makeNamedHunk(uint64_t additional_data, const adapter_t & patch_id_unique_label, const std::size_t & line, const adapter_t& old_line, const adapter_t& new_line) {
+        return makeNamedWithType<char_t, adapter_t>(additional_data, patch_id_unique_label, makeHunk<char_t, adapter_t>(line, old_line, new_line));
     }
 
     Named_T<Core_FP_T> makeNamedWithType_T(const StringAdapter::CharAdapter & patch_id_unique_label, std::shared_ptr<Patch> patch_type);
+    Named_T<Core_FP_T> makeNamedWithType_T(uint64_t additional_data, const StringAdapter::CharAdapter & patch_id_unique_label, std::shared_ptr<Patch> patch_type);
 
     Named_T<Core_FP_T> makeNamedHunk_T(const StringAdapter::CharAdapter & patch_id_unique_label, const std::size_t & line, const StringAdapter::CharAdapter & old_line, const StringAdapter::CharAdapter & new_line);
+    Named_T<Core_FP_T> makeNamedHunk_T(uint64_t additional_data, const StringAdapter::CharAdapter & patch_id_unique_label, const std::size_t & line, const StringAdapter::CharAdapter & old_line, const StringAdapter::CharAdapter & new_line);
 
     template <
         typename char_t,
@@ -2523,7 +2568,25 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    void renderDepsGraphAsDot(const DepsGraph<char_t, adapter_t> & g, bool show_names = false, bool show_hashes = true) {
+    void renderDepsGraphAsDot(const DepsGraph<char_t, adapter_t> & g) {
+        renderDepsGraphAsDot(g, false, true);
+    }
+
+    template <
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
+    void renderDepsGraphAsDot(const DepsGraph<char_t, adapter_t> & g, bool show_hashes) {
+        renderDepsGraphAsDot(g, false, show_hashes);
+    }
+
+    template <
+        typename char_t,
+        typename adapter_t,
+        typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
+    >
+    void renderDepsGraphAsDot(const DepsGraph<char_t, adapter_t> & g, bool show_hashes, bool show_names_with_hashes) {
         std::cout << "digraph {";
         auto indent = "   ";
         std::cout << "\n" << indent << "graph [rankdir=LR];";
@@ -2544,11 +2607,11 @@ namespace DarcsPatch {
             if (begin != value.end()) {
                 if (show_hashes) {
                     std::cout << "\n" << indent << "\"" << showID(key) << "\"";
-                    if (show_names) {
+                    if (show_names_with_hashes) {
                         std::cout << " [label=" << key.name << "]";
                     }
                     std::cout << " -> " << "{\"" << showID(*begin) << "\"";
-                    if (show_names) {
+                    if (show_names_with_hashes) {
                         std::cout << " [label=" << (*begin).name << "]";
                     }
                     std::cout << "}";
@@ -2558,15 +2621,23 @@ namespace DarcsPatch {
             }
         };
 
+        bool printed = false;
+
         for(auto & pair : g) {
+            printed = true;
             showNode(pair.first);
         }
 
         for(auto & pair : g) {
+            printed = true;
             showEdges(pair.first, pair.second.v1);
         }
 
-        std::cout << "\n}\n";
+        if (printed) {
+            std::cout << "\n";
+        }
+
+        std::cout << "}\n";
     }
 }
 

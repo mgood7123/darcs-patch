@@ -93,15 +93,27 @@ namespace DarcsPatch {
     }
 
     PatchInfo_T makePatchInfo_T(const StringAdapter::CharAdapter & patch_id_unique_label) {
-        return PatchInfo_T("unknown", patch_id_unique_label, "unknown", {});
+        return PatchInfo_T({}, patch_id_unique_label, {}, {});
+    }
+
+    PatchInfo_T makePatchInfo_T(uint64_t additional_data, const StringAdapter::CharAdapter & patch_id_unique_label) {
+        return PatchInfo_T(additional_data, {}, patch_id_unique_label, {}, {});
     }
 
     Named_T<Core_FP_T> makeNamedWithType_T(const StringAdapter::CharAdapter & patch_id_unique_label, std::shared_ptr<Patch> patch_type) {
-        return Named_T<Core_FP_T>(PatchInfo_T("unknown", patch_id_unique_label, "unknown", {}), {}, ToFL(Core_FP_T(patch_type)));
+        return Named_T<Core_FP_T>(PatchInfo_T({}, patch_id_unique_label, {}, {}), {}, ToFL(Core_FP_T(patch_type)));
+    }
+
+    Named_T<Core_FP_T> makeNamedWithType_T(uint64_t additional_data, const StringAdapter::CharAdapter & patch_id_unique_label, std::shared_ptr<Patch> patch_type) {
+        return Named_T<Core_FP_T>(PatchInfo_T(additional_data, {}, patch_id_unique_label, {}, {}), {}, ToFL(Core_FP_T(patch_type)));
     }
 
     Named_T<Core_FP_T> makeNamedHunk_T(const StringAdapter::CharAdapter & patch_id_unique_label, const size_t & line, const StringAdapter::CharAdapter & old_line, const StringAdapter::CharAdapter & new_line) {
         return makeNamedWithType_T(patch_id_unique_label, makeHunk_T(line, old_line, new_line));
+    }
+
+    Named_T<Core_FP_T> makeNamedHunk_T(uint64_t additional_data, const StringAdapter::CharAdapter & patch_id_unique_label, const size_t & line, const StringAdapter::CharAdapter & old_line, const StringAdapter::CharAdapter & new_line) {
+        return makeNamedWithType_T(additional_data, patch_id_unique_label, makeHunk_T(line, old_line, new_line));
     }
 
     std::shared_ptr<Patch> invert(std::shared_ptr<Patch> p) {

@@ -119,7 +119,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Perhaps<Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>>> speedyCommute(const Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>> & p) {
-            std::cout << "speedyCommute called with arguments p = " << p << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "speedyCommute called with arguments p = " << p << "\n";
             // (p1@(FP f1 _) :> p2@(FP f2 _))
             // saves the FP to p1 and p2 in addition to extracting their members
             auto p1 = p.v1;
@@ -136,29 +136,32 @@ namespace DarcsPatch {
         //
         template <typename char_t>
         static std::function<bool(const char_t &)> normalRegChars(const FL<char_t> & cs) {
-            std::cout << "normalRegChars called with arguments cs = " << cs << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "normalRegChars called with arguments cs = " << cs << "\n";
             if (cs.size() == 0) {
                 return [] (const char_t & f) { return false; };
             } else {
                 char_t c1;
                 FL<char_t> tmp1;
                 cs.extract(c1, tmp1);
-                if (c1 == '\\') {
+                char ch1 = c1;
+                if (ch1 == '\\') {
                     char_t c2;
                     FL<char_t> tmp2;
                     tmp1.extract(c2, tmp2);
-                    if (c2 == '.' || c2 == '-' || c2 == '\\') {
+                    char ch2 = c2;
+                    if (ch2 == '.' || ch2 == '-' || ch2 == '\\') {
                         return [=] (const char_t & f) { return f == c2 || normalRegChars<char_t>(tmp2)(f); };
                     }
                     std::string m = "'\\";
-                    m += ((char)c2);
+                    m += (ch2);
                     m += "' not supported";
                     throw new std::runtime_error(m);
                 } else {
                     char_t c2;
                     FL<char_t> tmp2;
                     tmp1.extract(c2, tmp2);
-                    if (c2 == '-') {
+                    char ch2 = c2;
+                    if (ch2 == '-') {
                         char_t c3;
                         FL<char_t> tmp3;
                         tmp2.extract(c3, tmp3);
@@ -171,28 +174,30 @@ namespace DarcsPatch {
 
         template <typename char_t>
         static FL<char_t> unescapeChars(const FL<char_t> & cs) {
-            std::cout << "unescapeChars called with arguments cs = " << cs << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "unescapeChars called with arguments cs = " << cs << "\n";
             if (cs.size() == 0) {
                 return cs;
             } else {
                 char_t c1;
                 FL<char_t> tmp1;
                 cs.extract(c1, tmp1);
-                if (c1 == '\\') {
+                char ch1 = c1;
+                if (ch1 == '\\') {
                     char_t c2;
                     FL<char_t> tmp2;
                     tmp1.extract(c2, tmp2);
-                    if (c2 == 'n') {
+                    char ch2 = c2;
+                    if (ch2 == 'n') {
                         FL<char_t> tmp3;
                         tmp3 = tmp3.push('\n');
                         tmp3 = tmp3.push(unescapeChars<char_t>(tmp2));
                         return tmp3;
-                    } else if (c2 == 't') {
+                    } else if (ch2 == 't') {
                         FL<char_t> tmp3;
                         tmp3 = tmp3.push('\t');
                         tmp3 = tmp3.push(unescapeChars<char_t>(tmp2));
                         return tmp3;
-                    } else if (c2 == '^') {
+                    } else if (ch2 == '^') {
                         FL<char_t> tmp3;
                         tmp3 = tmp3.push('^');
                         tmp3 = tmp3.push(unescapeChars<char_t>(tmp2));
@@ -208,20 +213,24 @@ namespace DarcsPatch {
 
         template <typename char_t>
         static std::function<bool(const char_t &)> RegChars(const FL<char_t> & cs) {
-            std::cout << "RegChars called with arguments cs = " << cs << "\n";
-            if (cs[0] == '^') {
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "RegChars called with arguments cs = " << cs << "\n";
+            char cs0 = cs[0];
+            if (cs0 == '^') {
                 char_t c;
                 FL<char_t> tmp;
                 cs.extract(c, tmp);
                 return [=] (const char_t & f) { return ! normalRegChars<char_t>(unescapeChars<char_t>(tmp))(f); };
+            } else {
+                char cs1 = cs[1];
+                if (cs0 == '\\' && cs1 == '^') {
+                    char_t c;
+                    FL<char_t> tmp;
+                    cs.extract(c, tmp);
+                    return [=] (const char_t & f) { return normalRegChars<char_t>(unescapeChars<char_t>(tmp))(f); };
+                } else {
+                    return [=] (const char_t & f) { return normalRegChars<char_t>(unescapeChars<char_t>(cs))(f); };
+                }
             }
-            if (cs[0] == '\\' && cs[1] == '^') {
-                char_t c;
-                FL<char_t> tmp;
-                cs.extract(c, tmp);
-                return [=] (const char_t & f) { return normalRegChars<char_t>(unescapeChars<char_t>(tmp))(f); };
-            }
-            return [=] (const char_t & f) { return normalRegChars<char_t>(unescapeChars<char_t>(cs))(f); };
         }
 
         template <
@@ -230,7 +239,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static std::function<bool(const char_t &)> RegChars(const adapter_t & cs) {
-            std::cout << "RegChars called with arguments cs = " << cs << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "RegChars called with arguments cs = " << cs << "\n";
             FL<char_t> cs_;
             for (const char_t & c : cs) {
                 cs_ = cs_.push(c);
@@ -247,7 +256,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static bool Any(const adapter_t & src, std::function<bool(const char_t &)> f) {
-            std::cout << "Any called with arguments src = " << src << ", std::function\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "Any called with arguments src = " << src << ", std::function\n";
             for (const char_t & c : src) {
                 if (f(c)) {
                     return true;
@@ -262,7 +271,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static adapter_t Drop(const adapter_t & src, const std::size_t & count) {
-            std::cout << "Drop called with arguments src = " << src << ", count = " << count << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "Drop called with arguments src = " << src << ", count = " << count << "\n";
             adapter_t copy = src;
             copy.erase(0, count);
             return copy;
@@ -274,7 +283,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Maybe<std::size_t> FindIndex(const adapter_t & src, std::function<bool(const char_t &)> f) {
-            std::cout << "FindIndex called with arguments src = " << src << ", std::function\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "FindIndex called with arguments src = " << src << ", std::function\n";
             std::size_t x = 0;
             for (const char_t & c : src) {
                 if (f(c)) {
@@ -291,7 +300,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static adapter_t TakeWhile(const adapter_t & src, std::function<bool(const char_t &)> f) {
-            std::cout << "TakeWhile called with arguments src = " << src << ", std::function\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "TakeWhile called with arguments src = " << src << ", std::function\n";
             adapter_t t;
             auto b = src.begin();
             auto e = src.end();
@@ -311,7 +320,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static adapter_t TakeWhileEnd(const adapter_t & src, std::function<bool(const char_t &)> f) {
-            std::cout << "TakeWhileEnd called with arguments src = " << src << ", std::function\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "TakeWhileEnd called with arguments src = " << src << ", std::function\n";
             adapter_t t;
             auto b = src.rbegin();
             auto e = src.rend();
@@ -331,7 +340,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static adapter_t DropWhile(const adapter_t & src, std::function<bool(const char_t &)> f) {
-            std::cout << "DropWhile called with arguments src = " << src << ", std::function\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "DropWhile called with arguments src = " << src << ", std::function\n";
             adapter_t t;
             auto b = src.begin();
             auto e = src.end();
@@ -352,7 +361,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static adapter_t DropWhileEnd(const adapter_t & src, std::function<bool(const char_t &)> f) {
-            std::cout << "DropWhileEnd called with arguments src = " << src << ", std::function\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "DropWhileEnd called with arguments src = " << src << ", std::function\n";
             adapter_t t;
             auto b = src.rbegin();
             auto e = src.rend();
@@ -373,7 +382,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static adapter_t Take(const adapter_t & src, int n) {
-            std::cout << "Take called with arguments src = " << src << ", n = " << n << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "Take called with arguments src = " << src << ", n = " << n << "\n";
             adapter_t copy = src;
             copy.erase(n, -1);
             return copy;
@@ -385,7 +394,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Tuple2<adapter_t, adapter_t> Span(const adapter_t & src, std::function<bool(const char_t &)> f) {
-            std::cout << "Span called with arguments src = " << src << ", std::function\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "Span called with arguments src = " << src << ", std::function\n";
             return {TakeWhile(src, f), DropWhile(src, f)};
         }
 
@@ -395,7 +404,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Maybe<RL<std::shared_ptr<adapter_t>>> loop(const std::size_t & from, const adapter_t & tokChars, const adapter_t & o, const adapter_t & n, const std::shared_ptr<adapter_t> & input) {
-            std::cout << "loop called with arguments from = " << from << ", tokChars = " << tokChars << ", o = " << o << ", n = " << n << ", input = " << input << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "loop called with arguments from = " << from << ", tokChars = " << tokChars << ", o = " << o << ", n = " << n << ", input = " << input << "\n";
             auto dropped = Drop<char_t, adapter_t>(*input.get(), from);
             auto start = FindIndex<char_t, adapter_t>(dropped, RegChars<char_t, adapter_t>(tokChars));
             if (!start.has_value) {
@@ -438,7 +447,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Maybe<adapter_t> tryTokReplace(const adapter_t & tokChars, const adapter_t & o, const adapter_t & n, const adapter_t & input) {
-            std::cout << "tryTokReplace called with arguments tokChars = " << tokChars << ", o = " << o << ", n = " << n << ", input = " << input << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "tryTokReplace called with arguments tokChars = " << tokChars << ", o = " << o << ", n = " << n << ", input = " << input << "\n";
             if (o.size() == 0) {
                 throw new std::runtime_error("tryTokReplace called with empty old token");
             }
@@ -475,7 +484,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Maybe<RL<adapter_t>> tryTokReplaces(const adapter_t & t, const adapter_t & o, const adapter_t & n, const RL<adapter_t>& items) {
-            std::cout << "tryTokReplaces called with arguments t = " << t << ", o = " << o << ", n = " << n << ", items = " << items << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "tryTokReplaces called with arguments t = " << t << ", o = " << o << ", n = " << n << ", items = " << items << "\n";
             // tryTokReplaces :: String -> B.ByteString -> B.ByteString
             //                -> [B.ByteString] -> Maybe [B.ByteString]
             // tryTokReplaces t o n = mapM (tryTokReplace t o n)
@@ -502,7 +511,7 @@ namespace DarcsPatch {
             const std::size_t & line1, const std::size_t & len_old1, const std::size_t & len_new1,
             const std::size_t & line2, const std::size_t & len_old2, const std::size_t & len_new2
         ) {
-            std::cout << "commuteHunkLines called with arguments line1 = " << line1 << ", len_old1 = " << len_old1 << ", len_new1 = " << len_new1 << ", line2 = " << line2 << ", len_old2 = " << len_old2 << ", len_new2 = " << len_new2 << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commuteHunkLines called with arguments line1 = " << line1 << ", len_old1 = " << len_old1 << ", len_new1 = " << len_new1 << ", line2 = " << line2 << ", len_old2 = " << len_old2 << ", len_new2 = " << len_new2 << "\n";
             if (line1 + len_new1 < line2) {
                 return {{ line2 - len_new1 + len_old1, line1 }};
             }
@@ -524,7 +533,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Perhaps<Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>>> commuteFP(const AnchorPath<char_t, adapter_t> & f, const Tuple2<std::shared_ptr<Patch>, std::shared_ptr<Patch>> & p) {
-            std::cout << "commuteFP called with arguments f = " << f << ", p = " << p << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commuteFP called with arguments f = " << f << ", p = " << p << "\n";
             if (p.v2->type() == HUNK) {
                 FileHunk<char_t, adapter_t> * f2 = static_cast<FileHunk<char_t, adapter_t>*>(p.v2.get());
                 if (f2->old_lines == NilRL && f2->new_lines == NilRL) {
@@ -540,7 +549,7 @@ namespace DarcsPatch {
             if (p.v1->type() == HUNK && p.v2->type() == HUNK) {
                 FileHunk<char_t, adapter_t> * f1 = static_cast<FileHunk<char_t, adapter_t>*>(p.v1.get());
                 FileHunk<char_t, adapter_t> * f2 = static_cast<FileHunk<char_t, adapter_t>*>(p.v2.get());
-                std::cout << "calling commuteHunkLines with arguments f1 = " << *f1 << ", f2 = " << *f2 << "\n";
+                if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "calling commuteHunkLines with arguments f1 = " << *f1 << ", f2 = " << *f2 << "\n";
                 auto m = commuteHunkLines(f1->line, f1->old_lines.size(), f1->new_lines.size(), f2->line, f2->old_lines.size(), f2->new_lines.size());
                 if (!m.has_value) {
                     return {FAILED, {}};
@@ -595,7 +604,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Perhaps<Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>>> commuteFileDir(const Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>> & p) {
-            std::cout << "commuteFileDir called with arguments p = " << p << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commuteFileDir called with arguments p = " << p << "\n";
             auto fp1 = p.v1;
             auto fp2 = p.v2;
             auto f1 = fp1.anchor_path;
@@ -615,7 +624,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Perhaps<Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>>> cleverCommute(const Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>> & p) {
-            std::cout << "cleverCommute called with arguments std::function, p = " << p << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "cleverCommute called with arguments std::function, p = " << p << "\n";
             auto p1 = p.v1;
             auto p2 = p.v2;
             auto tmp = commuteFileDir<char_t, adapter_t>({p1, p2});
@@ -638,7 +647,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Perhaps<Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>>> everythingElseCommute(const Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>> & p) {
-            std::cout << "everythingElseCommute called with arguments p = " << p << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "everythingElseCommute called with arguments p = " << p << "\n";
             // auto p1 = v.v1;
             // auto p2 = v.v2;
 
@@ -655,7 +664,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Maybe<Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>>> commute2 (const Tuple2<Core_FP<char_t, adapter_t>, Core_FP<char_t, adapter_t>> & p) {
-            std::cout << "commute2 called with arguments p = " << p << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commute2 called with arguments p = " << p << "\n";
             // instance Commute Prim where
             //     commute x = toMaybe $ msum [speedyCommute x,
             //                                 everythingElseCommute x
@@ -681,7 +690,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Maybe<Tuple2<FL<Core_FP<char_t, adapter_t>>, FL<Core_FP<char_t, adapter_t>>>> commute1_ (const Tuple2<FL<Core_FP<char_t, adapter_t>>, FL<Core_FP<char_t, adapter_t>>> & p) {
-            std::cout << "commute1_ called with arguments p = " << p << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commute1_ called with arguments p = " << p << "\n";
             if (p.v1 == NilFL) {
                 return {{p.v2, p.v1}};
             }
@@ -736,7 +745,7 @@ namespace DarcsPatch {
             typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
         >
         static Maybe<Tuple2<Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>, Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>>> commute1 (const Tuple2<Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>, Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>> & p) {
-            std::cout << "commute1 called with arguments p = " << p << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commute1 called with arguments p = " << p << "\n";
             /*
                 src/Darcs/Patch/Named.hs line 168
 
@@ -944,7 +953,7 @@ namespace DarcsPatch {
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
     Maybe<Tuple2<FL<Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>>, Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>>> commuterIdFL(const Tuple2<Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>, FL<Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>>> & p) {
-        std::cout << "commuterIdFL called with arguments p = " << p << "\n";
+        if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commuterIdFL called with arguments p = " << p << "\n";
         if (p.v2 == NilFL) {
             return Tuple2<FL<Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>>, Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>>(p.v2, p.v1);
         }
@@ -979,7 +988,7 @@ namespace DarcsPatch {
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
     Maybe<Tuple2<FL<Core_FP<char_t, adapter_t>>, Core_FP<char_t, adapter_t>>> commuterIdFL(const Tuple2<Core_FP<char_t, adapter_t>, FL<Core_FP<char_t, adapter_t>>> & p) {
-        std::cout << "commuterIdFL called with arguments p = " << p << "\n";
+        if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commuterIdFL called with arguments p = " << p << "\n";
         if (p.v2 == NilFL) {
             return Tuple2<FL<Core_FP<char_t, adapter_t>>, Core_FP<char_t, adapter_t>>(p.v2, p.v1);
         }
@@ -1014,7 +1023,7 @@ namespace DarcsPatch {
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
     Maybe<Tuple2<FL<Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>>, Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>>> commuteFL(const Tuple2<Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>, FL<Named<Core_FP<char_t, adapter_t>, char_t, adapter_t>>> & p) {
-        std::cout << "commuterFL called with arguments p = " << p << "\n";
+        if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commuterFL called with arguments p = " << p << "\n";
         return commuterIdFL<char_t, adapter_t>(p);
     }
 
@@ -1024,7 +1033,7 @@ namespace DarcsPatch {
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
     Maybe<Tuple2<Core_FP<char_t, adapter_t>, RL<Core_FP<char_t, adapter_t>>>> commuterRLId(const Tuple2<RL<Core_FP<char_t, adapter_t>>, Core_FP<char_t, adapter_t>> & p) {
-        std::cout << "commuterRLId called with arguments p = " << p << "\n";
+        if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commuterRLId called with arguments p = " << p << "\n";
         if (p.v1 == NilRL) {
             return {{p.v2, p.v1}};
         }
@@ -1055,7 +1064,7 @@ namespace DarcsPatch {
     >
     Maybe<Tuple2<FL<Core_FP<char_t, adapter_t>>, RL<Core_FP<char_t, adapter_t>>>> right_or_left(const RL<Core_FP<char_t, adapter_t>> & p1, const FL<Core_FP<char_t, adapter_t>> & p2, bool is_left) {
         if (is_left) {
-            std::cout << "left called with arguments p1 = " << p1 << ", p2 = " << p2 << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "left called with arguments p1 = " << p1 << ", p2 = " << p2 << "\n";
             auto & bs = p2;
             if (p1 == NilRL) {
                 return {{bs, p1}};
@@ -1083,7 +1092,7 @@ namespace DarcsPatch {
             t1.v2 = as1.push(a1);
             return {t1};
         } else {
-            std::cout << "right called with arguments p1 = " << p1 << ", p2 = " << p2 << "\n";
+            if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "right called with arguments p1 = " << p1 << ", p2 = " << p2 << "\n";
             RL<Core_FP<char_t, adapter_t>> as = p1;
             if (p2 == NilFL) {
                 return {{p2, as}};
@@ -1116,7 +1125,7 @@ namespace DarcsPatch {
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
     Maybe<Tuple2<FL<Core_FP<char_t, adapter_t>>, RL<Core_FP<char_t, adapter_t>>>> commuterRLFL(const Tuple2<RL<Core_FP<char_t, adapter_t>>, FL<Core_FP<char_t, adapter_t>>> & p) {
-        std::cout << "commuterRLFL called with arguments p = " << p << "\n";
+        if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commuterRLFL called with arguments p = " << p << "\n";
         return right_or_left(p.v1, p.v2, false);
     }
 
@@ -1126,7 +1135,7 @@ namespace DarcsPatch {
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
     Maybe<Tuple2<FL<Core_FP<char_t, adapter_t>>, RL<Core_FP<char_t, adapter_t>>>> commuteRLFL(const Tuple2<RL<Core_FP<char_t, adapter_t>>, FL<Core_FP<char_t, adapter_t>>> & p) {
-        std::cout << "commuteRLFL called with arguments p = " << p << "\n";
+        if (DARCH_PATCH_DEBUG_LOGGING) std::cout << "commuteRLFL called with arguments p = " << p << "\n";
         return commuterRLFL(p);
     }
 }

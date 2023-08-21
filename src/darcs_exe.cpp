@@ -37,7 +37,7 @@ void darcs_t2() {
 
     });
 
-    DarcsPatch::renderDepsGraphAsDot(graph, true, false);
+    DarcsPatch::renderDepsGraphAsDot(graph, false);
 }
 
 void darcs_t3() {
@@ -62,7 +62,7 @@ void darcs_t3() {
 
     });
 
-    DarcsPatch::renderDepsGraphAsDot(graph, true, false);
+    DarcsPatch::renderDepsGraphAsDot(graph, false);
 }
 
 void darcs_t4() {
@@ -77,7 +77,32 @@ void darcs_t4() {
 
     });
 
-    DarcsPatch::renderDepsGraphAsDot(graph, true, false);
+    DarcsPatch::renderDepsGraphAsDot(graph, false);
+}
+
+void darcs_t5() {
+    auto graph = DarcsPatch::depsGraph_T({
+
+        DarcsPatch::makeNamedWithType_T ("p1", DarcsPatch::makeAddFile()),
+
+        DarcsPatch::makeNamedHunk_T("0", 1, "", "\n\n\n\n\n"),
+        DarcsPatch::makeNamedHunk_T("1", 1, "\n\n\n", "\n\n"),
+        DarcsPatch::makeNamedHunk_T("2", 4, "", "\n\n\n\n\n"),
+        DarcsPatch::makeNamedHunk_T("3", 4, "", ""),
+        DarcsPatch::makeNamedHunk_T("4", 3, "", ""),
+        DarcsPatch::makeNamedHunk_T("5", 4, "", ""),
+        DarcsPatch::makeNamedHunk_T("6", 3, "", ""),
+        DarcsPatch::makeNamedHunk_T("7", 4, "", ""),
+        DarcsPatch::makeNamedHunk_T("8", 6, "", ""),
+        DarcsPatch::makeNamedHunk_T("9", 7, "", ""),
+        DarcsPatch::makeNamedHunk_T("10", 8, "", ""),
+        DarcsPatch::makeNamedHunk_T("11", 9, "", ""),
+        DarcsPatch::makeNamedHunk_T("12", 10, "", ""),
+        DarcsPatch::makeNamedHunk_T("13", 11, "", ""),
+
+    });
+
+    DarcsPatch::renderDepsGraphAsDot(graph, false);
 }
 
 int main() {
