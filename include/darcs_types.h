@@ -1985,8 +1985,8 @@ namespace DarcsPatch {
         RL<adapter_t> old_lines;
         RL<adapter_t> new_lines;
         FileHunk() : line(0), old_lines(NilFL), new_lines(NilFL) {}
-        FileHunk(const std::size_t & line,const RL<adapter_t>& old_lines, const RL<adapter_t>& new_lines) : line(line), old_lines(old_lines), new_lines(new_lines) {}
-        FileHunk(const std::size_t & line,const adapter_t& old_line, const adapter_t& new_line) : line(line) {
+        FileHunk(const std::size_t & line, const RL<adapter_t>& old_lines, const RL<adapter_t>& new_lines) : line(line), old_lines(old_lines), new_lines(new_lines) {}
+        FileHunk(const std::size_t & line, const adapter_t& old_line, const adapter_t& new_line) : line(line) {
 
             // need to cast from
             //       std::shared_ptr<BasicStringAdapter<T>>
@@ -2388,11 +2388,11 @@ namespace DarcsPatch {
         typename adapter_t,
         typename AdapterMustExtendBasicStringAdapter = typename std::enable_if<std::is_base_of<StringAdapter::BasicStringAdapter<char_t>, adapter_t>::value>::type
     >
-    std::shared_ptr<Patch> makeHunk(const std::size_t & line,const RL<adapter_t>& old_lines, const RL<adapter_t>& new_lines) {
+    std::shared_ptr<Patch> makeHunk(const std::size_t & line, const RL<adapter_t>& old_lines, const RL<adapter_t>& new_lines) {
         return std::static_pointer_cast<Patch>(std::make_shared<FileHunk<char_t, adapter_t>>(line, old_lines, new_lines));
     }
 
-    std::shared_ptr<Patch> makeHunk_T(const std::size_t & line,const RL<StringAdapter::CharAdapter>& old_lines, const RL<StringAdapter::CharAdapter>& new_lines);
+    std::shared_ptr<Patch> makeHunk_T(const std::size_t & line, const RL<StringAdapter::CharAdapter>& old_lines, const RL<StringAdapter::CharAdapter>& new_lines);
     std::shared_ptr<Patch> makeHunk_T(const std::size_t & line, const StringAdapter::CharAdapter& old_line, const StringAdapter::CharAdapter& new_line);
     
     template <
