@@ -7,3 +7,6 @@
 [submodule "StringAdapter"]
 	path = StringAdapter
 	url = https://github.com/mgood7123/StringAdapter
+[submodule "testBuilder"]
+	path = testBuilder
+	url = https://github.com/mgood7123/testBuilder
